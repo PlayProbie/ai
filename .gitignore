@@ -1,0 +1,29 @@
+# Python & OS
+__pycache__/
+*.pyc
+.DS_Store
+Thumbs.db
+
+# Virtual Environment
+.venv/
+venv/
+env/
+
+# Environment Variables (절대 커밋 금지)
+.env
+.env.*
+
+# IDE (개인 설정만 제외, settings.json은 공유)
+.vscode/*
+!.vscode/settings.json
+!.vscode/extensions.json
+.idea/
+
+# AI Data & Models (로컬 DB 파일 제외)
+data/
+*.pt
+*.pth
+*.onnx
+
+# Ruff cache
+.ruff_cache/
