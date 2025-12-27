@@ -1,0 +1,67 @@
+[project]
+name = "ai"
+version = "0.1.0"
+description = "PlayProbie AI Engine"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "fastapi>=0.127.1",
+    "pydantic-settings>=2.12.0",
+    "uvicorn[standard]>=0.40.0",
+]
+
+[dependency-groups]
+dev = [
+    "ruff>=0.14.10",
+]
+
+# ============================================
+# Ruff Configuration (Linter + Formatter)
+# ============================================
+
+[tool.ruff]
+# Python 버전 타겟
+target-version = "py312"
+
+# 라인 길이 (Black 호환)
+line-length = 88
+
+# 제외 디렉토리
+exclude = [
+    ".git",
+    ".venv",
+    "__pycache__",
+    ".mypy_cache",
+    ".pytest_cache",
+]
+
+[tool.ruff.lint]
+# 활성화할 규칙 그룹
+select = [
+    "E",      # pycodestyle errors
+    "W",      # pycodestyle warnings
+    "F",      # Pyflakes
+    "I",      # isort (import 정렬)
+    "B",      # flake8-bugbear (버그 방지)
+    "C4",     # flake8-comprehensions
+    "UP",     # pyupgrade (최신 Python 문법)
+]
+
+# 무시할 규칙
+ignore = [
+    "E501",   # 라인 길이 (formatter가 처리)
+]
+
+# 자동 수정 가능 규칙
+fixable = ["ALL"]
+
+[tool.ruff.lint.isort]
+# import 정렬 설정
+known-first-party = ["app"]
+
+[tool.ruff.format]
+# 포맷터 설정 (Black 호환)
+quote-style = "double"
+indent-style = "space"
+skip-magic-trailing-comma = false
+line-ending = "auto"
