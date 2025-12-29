@@ -115,5 +115,5 @@ class BedrockService:
             ) from error
 
 
-# 싱글톤 인스턴스
-bedrock_service = BedrockService()
+# 싱글톤 인스턴스는 app/core/dependencies.py의 get_bedrock_service()에서 관리됩니다.
+# Lazy Initialization을 통해 모듈 import 시점의 초기화 실패를 방지합니다.

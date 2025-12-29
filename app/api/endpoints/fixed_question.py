@@ -1,18 +1,22 @@
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
 
+from app.core.dependencies import get_bedrock_service
 from app.schemas.fixed_question import (
     FixedQuestionDraft,
     FixedQuestionDraftCreate,
     FixedQuestionFeedback,
     FixedQuestionFeedbackCreate,
 )
-from app.services.bedrock_service import bedrock_service
+from app.services.bedrock_service import BedrockService
 
 router = APIRouter()
 
 
 @router.post("/draft", response_model=FixedQuestionDraft)
-async def generate_fixed_questions(request: FixedQuestionDraftCreate):
+def generate_fixed_questions(
+    request: FixedQuestionDraftCreate,
+    service: BedrockService = Depends(get_bedrock_service),
+):
     """
     게임 정보와 테스트 목적을 받아 고정 질문(Fixed Question) 후보를 생성합니다.
 
@@ -29,11 +33,14 @@ async def generate_fixed_questions(request: FixedQuestionDraftCreate):
         AIModelNotAvailableException: AI 모델 사용 불가 시
     """
     # AIException은 GlobalExceptionHandler(ai_exception_handler)에서 처리됨
-    return bedrock_service.generate_fixed_questions(request)
+    return service.generate_fixed_questions(request)
 
 
 @router.post("/feedback", response_model=FixedQuestionFeedback)
-async def generate_feedback_questions(request: FixedQuestionFeedbackCreate):
+def generate_feedback_questions(
+    request: FixedQuestionFeedbackCreate,
+    service: BedrockService = Depends(get_bedrock_service),
+):
     """
     기존 질문과 피드백을 받아 수정된 질문 대안 3가지를 생성합니다.
 
@@ -51,4 +58,4 @@ async def generate_feedback_questions(request: FixedQuestionFeedbackCreate):
         AIGenerationException: AI 응답 생성 실패 시
         AIModelNotAvailableException: AI 모델 사용 불가 시
     """
-    return bedrock_service.generate_feedback_questions(request)
+    return service.generate_feedback_questions(request)
