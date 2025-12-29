@@ -12,6 +12,7 @@ env/
 # Environment Variables (절대 커밋 금지)
 .env
 .env.*
+!.env.example
 
 # IDE (개인 설정만 제외, settings.json은 공유)
 .vscode/*

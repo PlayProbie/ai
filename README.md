@@ -60,11 +60,12 @@ uv sync
 
 ### 3. Environment Setup (.env)
 
-프로젝트 루트에 `.env` 파일을 생성하고 아래 내용을 입력하세요.
-
-```ini
-PROJECT_NAME="PlayProbie AI Engine"
+```bash
+cp .env.example .env
+# .env 파일을 열어 필수 환경 변수를 설정하세요
 ```
+
+> 📋 환경 변수 상세 내용은 [`.env.example`](.env.example) 파일을 참고하세요.
 
 ### 4. Run Server
 
@@ -161,3 +162,14 @@ uv run ruff check .        # 린트 검사
 uv run ruff check --fix .  # 자동 수정
 uv run ruff format .       # 코드 포매팅
 ```
+
+## 🛠 IDE Setup (VS Code)
+
+이 프로젝트에서는 **Ruff**를 Linter/Formatter로 사용합니다.
+VS Code에서 개발 시 아래 익스텐션을 설치해주세요.
+
+| Extension | 설명 |
+| --------- | ---- |
+| [Ruff](https://marketplace.visualstudio.com/items?itemName=charliermarsh.ruff) | Python Linter & Formatter |
+
+> 💡 **Tip**: 프로젝트에 포함된 `.vscode/settings.json`에 Ruff 설정이 이미 구성되어 있습니다.

@@ -1,6 +1,9 @@
 from fastapi import APIRouter
 
+from app.api.endpoints import fixed_question
+
 api_router = APIRouter()
 
-# 나중에 여기에 controller(endpoints)를 include 합니다.
-# api_router.include_router(draft.router, prefix="/draft", tags=["draft"])
+api_router.include_router(
+    fixed_question.router, prefix="/fixed-questions", tags=["fixed-questions"]
+)

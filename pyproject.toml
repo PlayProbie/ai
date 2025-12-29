@@ -8,11 +8,16 @@ dependencies = [
     "fastapi>=0.127.1",
     "pydantic-settings>=2.12.0",
     "uvicorn[standard]>=0.40.0",
+    "boto3>=1.42.14",
+    "langgraph>=1.0.5",
+    "langchain-aws>=1.1.0",
 ]
 
 [dependency-groups]
 dev = [
     "ruff>=0.14.10",
+    "pytest>=8.0.0",
+    "httpx>=0.28.0",
 ]
 
 # ============================================
@@ -50,6 +55,7 @@ select = [
 # 무시할 규칙
 ignore = [
     "E501",   # 라인 길이 (formatter가 처리)
+    "B008",   # FastAPI Depends() 패턴 허용
 ]
 
 # 자동 수정 가능 규칙
@@ -65,3 +71,14 @@ quote-style = "double"
 indent-style = "space"
 skip-magic-trailing-comma = false
 line-ending = "auto"
+
+# ============================================
+# Pytest Configuration
+# ============================================
+
+[tool.pytest.ini_options]
+# Python 경로 설정 (app 모듈 import 가능하게)
+pythonpath = ["."]
+# 테스트 디렉토리
+testpaths = ["tests"]
+
