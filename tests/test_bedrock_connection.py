@@ -1,14 +1,9 @@
 """Bedrock 연결 테스트 스크립트"""
 
 import sys
-from pathlib import Path
 
-# 프로젝트 루트를 sys.path에 추가
-project_root = Path(__file__).parent.parent
-sys.path.insert(0, str(project_root))
-
-from app.services.bedrock_service import bedrock_service
 from app.core.config import settings
+from app.services.bedrock_service import bedrock_service
 
 
 def test_bedrock_connection():
@@ -17,23 +12,23 @@ def test_bedrock_connection():
     print(f"📍 리전: {settings.AWS_REGION}")
     print(f"📍 모델 ID: {settings.BEDROCK_MODEL_ID}")
     print()
-    
+
     try:
         # 간단한 프롬프트로 테스트
         test_prompt = "Hello! Please respond with just 'Connection successful!' if you can read this."
         print(f"📤 프롬프트: {test_prompt}")
         print()
-        
+
         response = bedrock_service.invoke(test_prompt)
-        
+
         print("✅ 연결 성공!")
         print(f"📥 응답: {response}")
         print()
-        
+
         return True
-        
+
     except Exception as e:
-        print(f"❌ 연결 실패!")
+        print("❌ 연결 실패!")
         print(f"에러: {e}")
         print()
         print("💡 확인사항:")
