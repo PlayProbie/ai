@@ -4,7 +4,7 @@ from pydantic_settings import BaseSettings
 class Settings(BaseSettings):
     # 기본 설정
     PROJECT_NAME: str = "AI Service"
-    API_PREFIX: str = "/api"
+    API_PREFIX: str = "/api/v1"
 
     # AWS Bedrock 설정 (2025 Bearer Token 인증)
     AWS_BEDROCK_API_KEY: str | None = None

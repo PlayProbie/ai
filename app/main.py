@@ -4,6 +4,7 @@ from fastapi import FastAPI
 
 from app.api.router import api_router
 from app.core.config import settings
+from app.core.exceptions import AIException, ai_exception_handler
 
 
 # [Lifespan Events]
@@ -26,6 +27,9 @@ app = FastAPI(
     lifespan=lifespan,  # 수명 주기 등록
     openapi_url=f"{settings.API_PREFIX}/openapi.json",  # Swagger 설정
 )
+
+# Exception Handler 등록
+app.add_exception_handler(AIException, ai_exception_handler)
 
 # API 라우터 등록
 app.include_router(api_router, prefix=settings.API_PREFIX)
