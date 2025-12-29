@@ -1,27 +1,41 @@
-from pydantic_settings import BaseSettings
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
-    # 기본 설정
+    """
+    환경 설정 클래스
+
+    환경 변수 로딩 우선순위:
+    1. 시스템 환경 변수 (GitHub Actions 등 CI/CD에서 주입)
+    2. .env 파일 (로컬 개발용)
+    3. 기본값
+    """
+
+    # 기본 설정 (변경 드묾)
     PROJECT_NAME: str = "AI Service"
     API_PREFIX: str = "/api/v1"
 
-    # AWS Bedrock 설정 (2025 Bearer Token 인증)
-    AWS_BEDROCK_API_KEY: str | None = None
-    AWS_REGION: str = "ap-northeast-2"
-    
-    # Bedrock 모델 설정
-    BEDROCK_MODEL_ID: str = "anthropic.claude-3-haiku-20240307-v1:0"
-    
-    # 생성 파라미터
-    TEMPERATURE: float = 0.7
-    MAX_TOKENS: int = 2000
-    TOP_P: float = 0.9
+    # AWS Bedrock 설정 - 필수 (기본값 없음)
+    AWS_BEDROCK_API_KEY: str
+    AWS_REGION: str
 
-    class Config:
-        # .env 파일 위치 지정
-        env_file = ".env"
-        env_file_encoding = "utf-8"
+    # Bedrock 모델 설정 - 필수 (기본값 없음)
+    BEDROCK_MODEL_ID: str
+
+    # 생성 파라미터 - 필수 (기본값 없음)
+    TEMPERATURE: float
+    MAX_TOKENS: int
+    TOP_P: float
+
+    model_config = SettingsConfigDict(
+        # .env 파일 위치 지정 (없어도 에러 안남)
+        env_file=".env",
+        env_file_encoding="utf-8",
+        # .env 파일이 없어도 무시 (CI/CD 환경 대응)
+        env_ignore_empty=True,
+        # 대소문자 구분 없이 환경변수 매칭
+        case_sensitive=False,
+    )
 
 
 # 전역 설정 객체 생성

@@ -60,11 +60,12 @@ uv sync
 
 ### 3. Environment Setup (.env)
 
-프로젝트 루트에 `.env` 파일을 생성하고 아래 내용을 입력하세요.
-
-```ini
-PROJECT_NAME="PlayProbie AI Engine"
+```bash
+cp .env.example .env
+# .env 파일을 열어 필수 환경 변수를 설정하세요
 ```
+
+> 📋 환경 변수 상세 내용은 [`.env.example`](.env.example) 파일을 참고하세요.
 
 ### 4. Run Server
 
