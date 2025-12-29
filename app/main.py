@@ -1,10 +1,14 @@
+import logging
 from contextlib import asynccontextmanager
+from importlib.metadata import version
 
 from fastapi import FastAPI
 
 from app.api.router import api_router
 from app.core.config import settings
 from app.core.exceptions import AIException, ai_exception_handler
+
+logger = logging.getLogger(__name__)
 
 
 # [Lifespan Events]
@@ -13,12 +17,12 @@ from app.core.exceptions import AIException, ai_exception_handler
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # 시작 시 실행
-    print(f"🔥 {settings.PROJECT_NAME} is starting up...")
+    logger.info(f"🔥 {settings.PROJECT_NAME} is starting up...")
 
     yield  # 서버 작동 중...
 
     # 종료 시 실행
-    print("🛑 Shutting down...")
+    logger.info("🛑 Shutting down...")
 
 
 # 앱 초기화
@@ -38,4 +42,4 @@ app.include_router(api_router, prefix=settings.API_PREFIX)
 # [Health Check]
 @app.get("/health")
 def health_check():
-    return {"status": "ok", "service": "ai-engine", "version": "0.1.0"}
+    return {"status": "ok", "service": "ai-engine", "version": version("ai")}
