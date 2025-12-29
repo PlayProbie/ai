@@ -7,6 +7,8 @@ from langchain_core.prompts import ChatPromptTemplate
 from app.core.config import settings
 from app.core.exceptions import AIGenerationException, AIModelNotAvailableException
 from app.core.prompts import (
+    ANALYZE_ANSWER_PROMPT,
+    GENERATE_TAIL_QUESTION_PROMPT,
     QUESTION_FEEDBACK_SYSTEM_PROMPT,
     QUESTION_GENERATION_SYSTEM_PROMPT,
 )
@@ -16,6 +18,7 @@ from app.schemas.fixed_question import (
     FixedQuestionFeedback,
     FixedQuestionFeedbackCreate,
 )
+from app.schemas.survey import AnswerAnalysis
 
 logger = logging.getLogger(__name__)
 
@@ -44,9 +47,7 @@ class BedrockService:
             ) from error
 
     def invoke(self, prompt: str) -> str:
-        """
-        단순 프롬프트 호출 (연결 테스트용)
-        """
+        """단순 프롬프트 호출 (연결 테스트용)"""
         try:
             response = self.chat_model.invoke(prompt)
             return response.content
@@ -57,9 +58,7 @@ class BedrockService:
     def generate_fixed_questions(
         self, request: FixedQuestionDraftCreate
     ) -> FixedQuestionDraft:
-        """
-        게임 정보와 테스트 목적을 기반으로 고정 질문(Fixed Question)을 생성합니다.
-        """
+        """게임 정보 기반 고정 질문 생성."""
         try:
             prompt = ChatPromptTemplate.from_template(QUESTION_GENERATION_SYSTEM_PROMPT)
             # 호출 시 LLM 생성
@@ -84,9 +83,7 @@ class BedrockService:
     def generate_feedback_questions(
         self, request: FixedQuestionFeedbackCreate
     ) -> FixedQuestionFeedback:
-        """
-        기존 질문과 피드백을 기반으로 3가지 대안 질문을 생성합니다.
-        """
+        """피드백을 반영한 대안 질문 3개 생성."""
         try:
             prompt = ChatPromptTemplate.from_template(QUESTION_FEEDBACK_SYSTEM_PROMPT)
             # 호출 시 LLM 생성
@@ -113,6 +110,95 @@ class BedrockService:
             raise AIGenerationException(
                 f"질문 피드백 생성 중 오류 발생: {error}"
             ) from error
+
+    def analyze_answer(
+        self,
+        current_question: str,
+        user_answer: str,
+        tail_question_count: int,
+        game_info: dict | None = None,
+        conversation_history: list[dict] | None = None,
+    ) -> dict:
+        """답변 분석 후 TAIL_QUESTION 또는 PASS_TO_NEXT 결정."""
+        try:
+            prompt = ChatPromptTemplate.from_template(ANALYZE_ANSWER_PROMPT)
+            structured_llm = self.chat_model.with_structured_output(AnswerAnalysis)
+            chain = prompt | structured_llm
+
+            result: AnswerAnalysis = chain.invoke(
+                {
+                    "current_question": current_question,
+                    "user_answer": user_answer,
+                    "tail_question_count": tail_question_count,
+                    "game_name": game_info.get("game_name") if game_info else "Unknown",
+                    "game_genre": game_info.get("game_genre")
+                    if game_info
+                    else "Unknown",
+                    "game_context": game_info.get("game_context")
+                    if game_info
+                    else "No context",
+                    "test_purpose": game_info.get("test_purpose")
+                    if game_info
+                    else "General feedback",
+                    "conversation_history": self._format_history(conversation_history),
+                }
+            )
+
+            return {"action": result.action.value, "analysis": result.analysis}
+
+        except Exception as error:
+            logger.error(f"❌ 답변 분석 실패: {error}")
+            raise AIGenerationException(f"답변 분석 중 오류 발생: {error}") from error
+
+    def generate_tail_question(
+        self,
+        current_question: str,
+        user_answer: str,
+        game_info: dict | None = None,
+        conversation_history: list[dict] | None = None,
+    ) -> str:
+        """꼬리 질문 생성."""
+        try:
+            prompt = ChatPromptTemplate.from_template(GENERATE_TAIL_QUESTION_PROMPT)
+            chain = prompt | self.chat_model
+
+            response = chain.invoke(
+                {
+                    "current_question": current_question,
+                    "user_answer": user_answer,
+                    "game_name": game_info.get("game_name") if game_info else "Unknown",
+                    "game_genre": game_info.get("game_genre")
+                    if game_info
+                    else "Unknown",
+                    "game_context": game_info.get("game_context")
+                    if game_info
+                    else "No context",
+                    "test_purpose": game_info.get("test_purpose")
+                    if game_info
+                    else "General feedback",
+                    "conversation_history": self._format_history(conversation_history),
+                }
+            )
+
+            return response.content
+
+        except Exception as error:
+            logger.error(f"❌ 꼬리 질문 생성 실패: {error}")
+            raise AIGenerationException(
+                f"꼬리 질문 생성 중 오류 발생: {error}"
+            ) from error
+
+    def _format_history(self, history: list[dict] | None) -> str:
+        """대화 기록을 LLM이 읽기 쉬운 포맷으로 변환."""
+        if not history:
+            return "없음"
+
+        formatted = []
+        for i, entry in enumerate(history, 1):
+            formatted.append(f"{i}. Q: {entry.get('question', 'N/A')}")
+            formatted.append(f"   A: {entry.get('answer', 'N/A')}")
+
+        return "\n".join(formatted)
 
 
 # 싱글톤 인스턴스
