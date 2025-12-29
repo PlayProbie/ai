@@ -33,9 +33,9 @@ def build_survey_graph(bedrock_service: "BedrockService"):
         bedrock_service: 주입받을 BedrockService 인스턴스
     """
 
-    def analyze_answer_node(state: AgentState) -> dict:
-        """답변 분석 노드"""
-        result = bedrock_service.analyze_answer(
+    async def analyze_answer_node(state: AgentState) -> dict:
+        """답변 분석 노드 (비동기)"""
+        result = await bedrock_service.analyze_answer_async(
             current_question=state["current_question"],
             user_answer=state["user_answer"],
             tail_question_count=state.get("tail_question_count", 0),
@@ -44,9 +44,9 @@ def build_survey_graph(bedrock_service: "BedrockService"):
         )
         return {"action": result["action"], "analysis": result["analysis"]}
 
-    def generate_tail_node(state: AgentState) -> dict:
-        """꼬리 질문 생성 노드"""
-        tail_question = bedrock_service.generate_tail_question(
+    async def generate_tail_node(state: AgentState) -> dict:
+        """꼬리 질문 생성 노드 (비동기)"""
+        tail_question = await bedrock_service.generate_tail_question_async(
             current_question=state["current_question"],
             user_answer=state["user_answer"],
             game_info=state.get("game_info"),
