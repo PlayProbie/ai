@@ -199,7 +199,3 @@ class BedrockService:
             formatted.append(f"   A: {entry.get('answer', 'N/A')}")
 
         return "\n".join(formatted)
-
-
-# 싱글톤 인스턴스
-bedrock_service = BedrockService()

@@ -1,10 +1,12 @@
-from typing import Literal, TypedDict
+from typing import TYPE_CHECKING, Literal, TypedDict
 
 from langgraph.checkpoint.memory import MemorySaver
 from langgraph.graph import END, StateGraph
 
 from app.schemas.survey import SurveyAction
-from app.services.bedrock_service import bedrock_service
+
+if TYPE_CHECKING:
+    from app.services.bedrock_service import BedrockService
 
 
 class AgentState(TypedDict):
@@ -23,42 +25,45 @@ class AgentState(TypedDict):
     analysis: str | None
 
 
-def analyze_answer_node(state: AgentState) -> dict:
-    """답변 분석 노드"""
-    result = bedrock_service.analyze_answer(
-        current_question=state["current_question"],
-        user_answer=state["user_answer"],
-        tail_question_count=state.get("tail_question_count", 0),
-        game_info=state.get("game_info"),
-        conversation_history=state.get("conversation_history"),
-    )
-    return {"action": result["action"], "analysis": result["analysis"]}
+def build_survey_graph(bedrock_service: "BedrockService"):
+    """
+    LangGraph 워크플로우 생성
 
+    Args:
+        bedrock_service: 주입받을 BedrockService 인스턴스
+    """
 
-def generate_tail_node(state: AgentState) -> dict:
-    """꼬리 질문 생성 노드"""
-    tail_question = bedrock_service.generate_tail_question(
-        current_question=state["current_question"],
-        user_answer=state["user_answer"],
-        game_info=state.get("game_info"),
-        conversation_history=state.get("conversation_history"),
-    )
+    def analyze_answer_node(state: AgentState) -> dict:
+        """답변 분석 노드"""
+        result = bedrock_service.analyze_answer(
+            current_question=state["current_question"],
+            user_answer=state["user_answer"],
+            tail_question_count=state.get("tail_question_count", 0),
+            game_info=state.get("game_info"),
+            conversation_history=state.get("conversation_history"),
+        )
+        return {"action": result["action"], "analysis": result["analysis"]}
 
-    # 꼬리 질문 횟수 증가
-    new_count = state.get("tail_question_count", 0) + 1
+    def generate_tail_node(state: AgentState) -> dict:
+        """꼬리 질문 생성 노드"""
+        tail_question = bedrock_service.generate_tail_question(
+            current_question=state["current_question"],
+            user_answer=state["user_answer"],
+            game_info=state.get("game_info"),
+            conversation_history=state.get("conversation_history"),
+        )
 
-    return {"message": tail_question, "tail_question_count": new_count}
+        # 꼬리 질문 횟수 증가
+        new_count = state.get("tail_question_count", 0) + 1
 
+        return {"message": tail_question, "tail_question_count": new_count}
 
-def decide_route(state: AgentState) -> Literal["generate_tail", "end"]:
-    """분기 결정 로직"""
-    if state["action"] == SurveyAction.TAIL_QUESTION.value:
-        return "generate_tail"
-    return "end"
+    def decide_route(state: AgentState) -> Literal["generate_tail", "end"]:
+        """분기 결정 로직"""
+        if state["action"] == SurveyAction.TAIL_QUESTION.value:
+            return "generate_tail"
+        return "end"
 
-
-def build_survey_graph():
-    """LangGraph 워크플로우 생성"""
     workflow = StateGraph(AgentState)
 
     # 노드 추가
