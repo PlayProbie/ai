@@ -11,9 +11,8 @@ class Settings(BaseSettings):
     3. 기본값
     """
 
-    # 기본 설정 (변경 드묾)
+    # 기본 설정
     PROJECT_NAME: str = "AI Service"
-    API_PREFIX: str = ""
 
     # AWS Bedrock 설정 - 필수 (기본값 없음)
     AWS_BEDROCK_API_KEY: str

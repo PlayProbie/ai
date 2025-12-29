@@ -11,6 +11,7 @@ from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from app.services.bedrock_service import BedrockService
+    from app.services.interaction_service import InteractionService
 
 
 @lru_cache
@@ -28,3 +29,19 @@ def get_bedrock_service() -> "BedrockService":
     from app.services.bedrock_service import BedrockService
 
     return BedrockService()
+
+
+@lru_cache
+def get_interaction_service() -> "InteractionService":
+    """
+    InteractionService 싱글톤 인스턴스를 반환합니다.
+
+    BedrockService를 주입받아 LangGraph 워크플로우를 구성합니다.
+
+    Returns:
+        InteractionService: 설문 상호작용 서비스 인스턴스
+    """
+    from app.services.interaction_service import InteractionService
+
+    bedrock_svc = get_bedrock_service()
+    return InteractionService(bedrock_service=bedrock_svc)

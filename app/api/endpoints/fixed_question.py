@@ -32,7 +32,6 @@ def generate_fixed_questions(
         AIGenerationException: AI 응답 생성 실패 시
         AIModelNotAvailableException: AI 모델 사용 불가 시
     """
-    # AIException은 GlobalExceptionHandler(ai_exception_handler)에서 처리됨
     return service.generate_fixed_questions(request)
 
 
