@@ -1,6 +1,6 @@
 import logging
 from contextlib import asynccontextmanager
-from importlib.metadata import version
+from importlib.metadata import PackageNotFoundError, version
 
 from fastapi import FastAPI
 
@@ -9,6 +9,14 @@ from app.core.config import settings
 from app.core.exceptions import AIException, ai_exception_handler
 
 logger = logging.getLogger(__name__)
+
+
+def get_version() -> str:
+    """패키지 버전 반환 (개발 모드 대응)"""
+    try:
+        return version("ai")
+    except PackageNotFoundError:
+        return "dev"
 
 
 # [Lifespan Events]
@@ -29,17 +37,16 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title=settings.PROJECT_NAME,
     lifespan=lifespan,  # 수명 주기 등록
-    openapi_url=f"{settings.API_PREFIX}/openapi.json",  # Swagger 설정
 )
 
 # Exception Handler 등록
 app.add_exception_handler(AIException, ai_exception_handler)
 
 # API 라우터 등록
-app.include_router(api_router, prefix=settings.API_PREFIX)
+app.include_router(api_router)
 
 
 # [Health Check]
 @app.get("/health")
 def health_check():
-    return {"status": "ok", "service": "ai-engine", "version": version("ai")}
+    return {"status": "ok", "service": "ai-engine", "version": get_version()}
