@@ -162,3 +162,14 @@ uv run ruff check .        # 린트 검사
 uv run ruff check --fix .  # 자동 수정
 uv run ruff format .       # 코드 포매팅
 ```
+
+## 🛠 IDE Setup (VS Code)
+
+이 프로젝트에서는 **Ruff**를 Linter/Formatter로 사용합니다.
+VS Code에서 개발 시 아래 익스텐션을 설치해주세요.
+
+| Extension | 설명 |
+| --------- | ---- |
+| [Ruff](https://marketplace.visualstudio.com/items?itemName=charliermarsh.ruff) | Python Linter & Formatter |
+
+> 💡 **Tip**: 프로젝트에 포함된 `.vscode/settings.json`에 Ruff 설정이 이미 구성되어 있습니다.
