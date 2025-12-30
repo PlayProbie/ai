@@ -57,7 +57,9 @@ jobs:
     - name: Get ECR Login Token
       id: get-login-token
       run: |
-        echo "password=$(aws ecr get-login-password --region ${{ env.AWS_REGION }})" >> $GITHUB_OUTPUT
+        TOKEN=$(aws ecr get-login-password --region ${{ env.AWS_REGION }})
+        echo "::add-mask::$TOKEN"
+        echo "password=$TOKEN" >> $GITHUB_OUTPUT
 
     - name: Deploy to EC2 via SSM
       run: |
