@@ -82,7 +82,6 @@ line-ending = "auto"
 pythonpath = ["."]
 # 테스트 디렉토리
 testpaths = ["tests"]
-# async 테스트 자동 감지 (2025 권장)
 asyncio_mode = "auto"
 asyncio_default_fixture_loop_scope = "function"
 
