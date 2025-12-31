@@ -23,6 +23,7 @@ class AgentState(TypedDict):
     action: str | None  # SurveyAction enum value
     message: str | None  # Tail question text
     analysis: str | None
+    question_type: str | None  # "FIXED" or "TAIL"
 
 
 def build_survey_graph(bedrock_service: "BedrockService"):
@@ -42,7 +43,13 @@ def build_survey_graph(bedrock_service: "BedrockService"):
             game_info=state.get("game_info"),
             conversation_history=state.get("conversation_history"),
         )
-        return {"action": result["action"], "analysis": result["analysis"]}
+        # tail_question_count가 0이면 FIXED, 0보다 크면 TAIL
+        question_type = "TAIL" if state.get("tail_question_count", 0) > 0 else "FIXED"
+        return {
+            "action": result["action"],
+            "analysis": result["analysis"],
+            "question_type": question_type,
+        }
 
     async def generate_tail_node(state: AgentState) -> dict:
         """꼬리 질문 생성 노드 (비동기)"""
