@@ -40,7 +40,7 @@ class FixedQuestionDraft(BaseModel):
 class FixedQuestionFeedbackCreate(BaseModel):
     """
     고정 질문 피드백 요청 DTO (Server -> AI)
-    기존 질문에 대한 수정 요청을 처리합니다.
+    기존 질문에 대한 대안 질문 생성 요청을 처리합니다.
     """
 
     model_config = ConfigDict(
@@ -54,9 +54,8 @@ class FixedQuestionFeedbackCreate(BaseModel):
     game_context: str = Field(..., description="게임 상세 정보")
     test_purpose: str = Field(..., description="테스트 목적")
 
-    # Feedback Data
-    original_question: str = Field(..., description="수정하고 싶은 기존 질문")
-    feedback: str = Field(..., description="사용자 피드백 (수정 요청 사항)")
+    # Target Question
+    original_question: str = Field(..., description="대안 질문을 생성할 기존 질문")
 
 
 class FixedQuestionFeedback(BaseModel):
@@ -71,4 +70,7 @@ class FixedQuestionFeedback(BaseModel):
 
     candidates: list[str] = Field(
         ..., min_length=3, max_length=3, description="수정된 추천 대안 질문 3개"
+    )
+    feedback: str = Field(
+        ..., description="원본 질문(original_question)에 대한 분석 및 개선점 피드백"
     )

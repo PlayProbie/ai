@@ -21,6 +21,7 @@
 Play Probie AI 엔진은 게임 플레이테스트를 위한 AI 기반 설문/인터뷰 시스템입니다.
 
 **주요 기능**:
+
 - 게임 정보 기반 고정 질문 자동 생성
 - 사용자 피드백 기반 질문 수정
 - 실시간 설문 상호작용 (SSE 스트리밍)
@@ -30,10 +31,12 @@ Play Probie AI 엔진은 게임 플레이테스트를 위한 AI 기반 설문/�
 ## 공통 사항
 
 ### 요청 형식
+
 - **Content-Type**: `application/json`
 - **인코딩**: UTF-8
 
 ### 응답 형식
+
 - **Content-Type**: `application/json` (일반 응답)
 - **Content-Type**: `text/event-stream` (SSE 스트리밍)
 
@@ -48,6 +51,7 @@ Play Probie AI 엔진은 게임 플레이테스트를 위한 AI 기반 설문/�
 #### `GET /health`
 
 **응답 예시**:
+
 ```json
 {
   "status": "ok",
@@ -68,14 +72,15 @@ Play Probie AI 엔진은 게임 플레이테스트를 위한 AI 기반 설문/�
 
 **Request Body**:
 
-| 필드 | 타입 | 필수 | 설명 |
-|------|------|:----:|------|
-| `game_name` | `string` | ✅ | 테스트할 게임의 이름 |
-| `game_genre` | `string` | ✅ | 게임 장르 (Enum: `shooter`, `rpg`, 등) |
-| `game_context` | `string` | ✅ | 게임 상세 정보 및 배경 설정 (500자 이상 권장) |
-| `test_purpose` | `string` | ✅ | 테스트 목적 (Enum: `gameplay-validation`, 등) |
+| 필드           | 타입     | 필수 | 설명                                          |
+| -------------- | -------- | :--: | --------------------------------------------- |
+| `game_name`    | `string` |  ✅  | 테스트할 게임의 이름                          |
+| `game_genre`   | `string` |  ✅  | 게임 장르 (Enum: `shooter`, `rpg`, 등)        |
+| `game_context` | `string` |  ✅  | 게임 상세 정보 및 배경 설정 (500자 이상 권장) |
+| `test_purpose` | `string` |  ✅  | 테스트 목적 (Enum: `gameplay-validation`, 등) |
 
 **요청 예시**:
+
 ```json
 {
   "game_name": "Epic Adventure",
@@ -87,11 +92,12 @@ Play Probie AI 엔진은 게임 플레이테스트를 위한 AI 기반 설문/�
 
 **Response Body**:
 
-| 필드 | 타입 | 설명 |
-|------|------|------|
+| 필드        | 타입       | 설명                               |
+| ----------- | ---------- | ---------------------------------- |
 | `questions` | `string[]` | 생성된 추천 질문 리스트 (최대 5개) |
 
 **응답 예시**:
+
 ```json
 {
   "questions": [
@@ -108,40 +114,42 @@ Play Probie AI 엔진은 게임 플레이테스트를 위한 AI 기반 설문/�
 
 #### `POST /fixed-questions/feedback`
 
-기존 질문과 피드백을 받아 **수정된 질문 대안 3가지**를 생성합니다.
+기존 질문을 분석하여 **피드백과 수정된 질문 대안 3가지**를 생성합니다.
 
 **Request Body**:
 
-| 필드 | 타입 | 필수 | 설명 |
-|------|------|:----:|------|
-| `game_name` | `string` | ✅ | 테스트할 게임의 이름 |
-| `game_genre` | `string` | ✅ | 게임 장르 |
-| `game_context` | `string` | ✅ | 게임 상세 정보 |
-| `test_purpose` | `string` | ✅ | 테스트 목적 |
-| `original_question` | `string` | ✅ | 수정하고 싶은 기존 질문 |
-| `feedback` | `string` | ✅ | 사용자 피드백 (수정 요청 사항) |
+| 필드                | 타입     | 필수 | 설명                         |
+| ------------------- | -------- | :--: | ---------------------------- |
+| `game_name`         | `string` |  ✅  | 테스트할 게임의 이름         |
+| `game_genre`        | `string` |  ✅  | 게임 장르                    |
+| `game_context`      | `string` |  ✅  | 게임 상세 정보               |
+| `test_purpose`      | `string` |  ✅  | 테스트 목적                  |
+| `original_question` | `string` |  ✅  | 대안 질문을 생성할 기존 질문 |
 
 **요청 예시**:
+
 ```json
 {
   "game_name": "Epic Adventure",
   "game_genre": "rpg",
   "game_context": "중세 판타지 세계관의 오픈월드 RPG입니다...",
   "test_purpose": "gameplay-validation",
-  "original_question": "게임이 재미있었나요?",
-  "feedback": "너무 추상적입니다. 구체적인 게임 요소에 대해 물어봐 주세요."
+  "original_question": "게임이 재미있었나요?"
 }
 ```
 
 **Response Body**:
 
-| 필드 | 타입 | 설명 |
-|------|------|------|
-| `candidates` | `string[]` | 수정된 추천 대안 질문 (정확히 3개) |
+| 필드         | 타입       | 설명                                   |
+| ------------ | ---------- | -------------------------------------- |
+| `feedback`   | `string`   | 원본 질문에 대한 분석 및 개선점 피드백 |
+| `candidates` | `string[]` | 수정된 추천 대안 질문 (정확히 3개)     |
 
 **응답 예시**:
+
 ```json
 {
+  "feedback": "질문이 너무 추상적이어서 구체적인 피드백을 얻기 어렵습니다. 특정 게임 요소에 초점을 맞춘 질문으로 개선하면 좋겠습니다.",
   "candidates": [
     "게임의 전투 시스템에서 가장 재미있었던 순간은 언제였나요?",
     "퀘스트를 수행하면서 가장 기억에 남는 경험은 무엇인가요?",
@@ -164,15 +172,16 @@ Play Probie AI 엔진은 게임 플레이테스트를 위한 AI 기반 설문/�
 
 **Request Body**:
 
-| 필드 | 타입 | 필수 | 설명 |
-|------|------|:----:|------|
-| `session_id` | `string` | ✅ | 대화 세션 식별자 (DB/Memory Key) |
-| `user_answer` | `string` | ✅ | 사용자의 최근 답변 |
-| `current_question` | `string` | ✅ | 사용자가 답변한 현재 질문 (Context) |
-| `game_info` | `object` | ❌ | 게임 관련 추가 정보 (프롬프트용) |
-| `conversation_history` | `array` | ❌ | 이전 Q&A 기록 |
+| 필드                   | 타입     | 필수 | 설명                                |
+| ---------------------- | -------- | :--: | ----------------------------------- |
+| `session_id`           | `string` |  ✅  | 대화 세션 식별자 (DB/Memory Key)    |
+| `user_answer`          | `string` |  ✅  | 사용자의 최근 답변                  |
+| `current_question`     | `string` |  ✅  | 사용자가 답변한 현재 질문 (Context) |
+| `game_info`            | `object` |  ❌  | 게임 관련 추가 정보 (프롬프트용)    |
+| `conversation_history` | `array`  |  ❌  | 이전 Q&A 기록                       |
 
 **요청 예시**:
+
 ```json
 {
   "session_id": "sess_12345",
@@ -211,27 +220,27 @@ data: {"message": "구체적으로 어떤 상황에서 어려움을 느끼셨나
 
 **SSE 이벤트 타입**:
 
-| 이벤트 | 설명 |
-|--------|------|
-| `analysis` | AI의 답변 분석 결과 |
-| `token` | 실시간 토큰 스트리밍 (꼬리 질문 생성 시) |
-| `done` | 스트리밍 완료 및 최종 응답 |
-| `error` | 에러 발생 시 |
+| 이벤트     | 설명                                     |
+| ---------- | ---------------------------------------- |
+| `analysis` | AI의 답변 분석 결과                      |
+| `token`    | 실시간 토큰 스트리밍 (꼬리 질문 생성 시) |
+| `done`     | 스트리밍 완료 및 최종 응답               |
+| `error`    | 에러 발생 시                             |
 
 **Action 타입**:
 
-| 값 | 설명 |
-|----|------|
-| `TAIL_QUESTION` | 꼬리 질문 생성 (추가 질문 필요) |
-| `PASS_TO_NEXT` | 다음 질문으로 넘어감 (충분한 답변) |
+| 값              | 설명                               |
+| --------------- | ---------------------------------- |
+| `TAIL_QUESTION` | 꼬리 질문 생성 (추가 질문 필요)    |
+| `PASS_TO_NEXT`  | 다음 질문으로 넘어감 (충분한 답변) |
 
 **최종 응답 구조**:
 
-| 필드 | 타입 | 설명 |
-|------|------|------|
-| `action` | `string` | AI의 판단 결과 (`TAIL_QUESTION` \| `PASS_TO_NEXT`) |
-| `message` | `string?` | 꼬리 질문 내용 (PASS 시 null) |
-| `analysis` | `string?` | 답변 분석 내용 (로그용/디버깅용) |
+| 필드       | 타입      | 설명                                               |
+| ---------- | --------- | -------------------------------------------------- |
+| `action`   | `string`  | AI의 판단 결과 (`TAIL_QUESTION` \| `PASS_TO_NEXT`) |
+| `message`  | `string?` | 꼬리 질문 내용 (PASS 시 null)                      |
+| `analysis` | `string?` | 답변 분석 내용 (로그용/디버깅용)                   |
 
 ---
 
@@ -241,14 +250,15 @@ data: {"message": "구체적으로 어떤 상황에서 어려움을 느끼셨나
 
 ### 에러 응답 구조
 
-| 필드 | 타입 | 설명 |
-|------|------|------|
-| `message` | `string` | 에러 메시지 |
-| `status` | `integer` | HTTP 상태 코드 |
-| `code` | `string` | 에러 코드 |
-| `errors` | `array` | 필드별 에러 정보 (유효성 검증 실패 시) |
+| 필드      | 타입      | 설명                                   |
+| --------- | --------- | -------------------------------------- |
+| `message` | `string`  | 에러 메시지                            |
+| `status`  | `integer` | HTTP 상태 코드                         |
+| `code`    | `string`  | 에러 코드                              |
+| `errors`  | `array`   | 필드별 에러 정보 (유효성 검증 실패 시) |
 
 **에러 응답 예시**:
+
 ```json
 {
   "message": "AI 응답 생성에 실패했습니다.",
@@ -260,13 +270,13 @@ data: {"message": "구체적으로 어떤 상황에서 어려움을 느끼셨나
 
 ### 에러 코드 목록
 
-| 코드 | 이름 | HTTP 상태 | 설명 |
-|------|------|-----------|------|
-| `C001` | `INVALID_INPUT_VALUE` | 400 | 잘못된 입력값 |
-| `C004` | `INTERNAL_SERVER_ERROR` | 500 | 내부 서버 오류 |
-| `A001` | `AI_GENERATION_FAILED` | 500 | AI 응답 생성 실패 |
-| `A002` | `AI_MODEL_NOT_AVAILABLE` | 503 | AI 모델 사용 불가 |
-| `A003` | `AI_INVALID_REQUEST` | 400 | 잘못된 AI 요청 |
+| 코드   | 이름                     | HTTP 상태 | 설명              |
+| ------ | ------------------------ | --------- | ----------------- |
+| `C001` | `INVALID_INPUT_VALUE`    | 400       | 잘못된 입력값     |
+| `C004` | `INTERNAL_SERVER_ERROR`  | 500       | 내부 서버 오류    |
+| `A001` | `AI_GENERATION_FAILED`   | 500       | AI 응답 생성 실패 |
+| `A002` | `AI_MODEL_NOT_AVAILABLE` | 503       | AI 모델 사용 불가 |
+| `A003` | `AI_INVALID_REQUEST`     | 400       | 잘못된 AI 요청    |
 
 ---
 
@@ -288,11 +298,11 @@ uv run uvicorn app.main:app --reload
 
 ### 환경 변수
 
-| 변수명 | 설명 | 예시 |
-|--------|------|------|
-| `AWS_REGION` | AWS 리전 | `ap-northeast-2` |
+| 변수명                 | 설명            | 예시                           |
+| ---------------------- | --------------- | ------------------------------ |
+| `AWS_REGION`           | AWS 리전        | `ap-northeast-2`               |
 | `AWS_BEDROCK_MODEL_ID` | Bedrock 모델 ID | `anthropic.claude-3-sonnet...` |
-| `PROJECT_NAME` | 프로젝트 이름 | `play-probie` |
+| `PROJECT_NAME`         | 프로젝트 이름   | `play-probie`                  |
 
 ---
 

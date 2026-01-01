@@ -32,7 +32,8 @@ class MockBedrockService:
                 "첫 번째 대안 질문입니다.",
                 "두 번째 대안 질문입니다.",
                 "세 번째 대안 질문입니다.",
-            ]
+            ],
+            feedback="기존 질문은 명확하지만, 더 구체적인 상황을 유도하면 좋겠습니다.",
         )
 
 
@@ -94,7 +95,6 @@ class TestFixedQuestionFeedback:
             "game_context": "판타지 세계관의 RPG 게임입니다.",
             "test_purpose": "gameplay-validation",
             "original_question": "기존 질문입니다.",
-            "feedback": "더 구체적으로 수정해주세요.",
         }
 
         # When
@@ -105,3 +105,5 @@ class TestFixedQuestionFeedback:
         data = response.json()
         assert "candidates" in data
         assert len(data["candidates"]) == 3
+        assert "feedback" in data
+        assert len(data["feedback"]) > 0
