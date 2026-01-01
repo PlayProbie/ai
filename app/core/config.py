@@ -26,6 +26,14 @@ class Settings(BaseSettings):
     MAX_TOKENS: int
     TOP_P: float
 
+    # Titan Embeddings 설정
+    BEDROCK_EMBEDDING_MODEL_ID: str
+    EMBEDDING_DIMENSIONS: int = 1024
+
+    # Chroma 설정 (Embedded 모드 - 파일 저장)
+    CHROMA_PERSIST_DIR: str = "./chroma_data"
+    CHROMA_COLLECTION_NAME: str = "interactions"
+
     model_config = SettingsConfigDict(
         # .env 파일 위치 지정 (없어도 에러 안남)
         env_file=".env",

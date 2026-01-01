@@ -7,6 +7,7 @@ from typing import Annotated
 from fastapi import Depends, Request
 
 from app.services.bedrock_service import BedrockService
+from app.services.embedding_service import EmbeddingService
 from app.services.interaction_service import InteractionService
 
 
@@ -20,6 +21,12 @@ async def get_interaction_service(request: Request) -> InteractionService:
     return request.app.state.interaction_service
 
 
+async def get_embedding_service(request: Request) -> EmbeddingService:
+    """lifespan에서 초기화된 서비스를 app.state에서 가져옴"""
+    return request.app.state.embedding_service
+
+
 # Type Alias for DI (깔끔한 타입 힌트)
 BedrockServiceDep = Annotated[BedrockService, Depends(get_bedrock_service)]
 InteractionServiceDep = Annotated[InteractionService, Depends(get_interaction_service)]
+EmbeddingServiceDep = Annotated[EmbeddingService, Depends(get_embedding_service)]

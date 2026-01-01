@@ -8,6 +8,7 @@ from app.api.router import api_router
 from app.core.config import settings
 from app.core.exceptions import AIException, ai_exception_handler
 from app.services.bedrock_service import BedrockService
+from app.services.embedding_service import EmbeddingService
 from app.services.interaction_service import InteractionService
 
 logger = logging.getLogger(__name__)
@@ -28,6 +29,7 @@ def get_version() -> str:
 async def lifespan(app: FastAPI):
     # 🚀 Startup: 서비스를 app.state에 초기화
     app.state.bedrock_service = BedrockService()
+    app.state.embedding_service = EmbeddingService()
     app.state.interaction_service = InteractionService(app.state.bedrock_service)
     logger.info(f"🔥 {settings.PROJECT_NAME} is starting up...")
 
