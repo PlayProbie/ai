@@ -1,11 +1,12 @@
-import os
-import sys
+"""설문 상호작용 시뮬레이션 테스트
 
-# Add the current directory to sys.path to make 'app' module importable
-sys.path.append(os.getcwd())
+이 테스트는 InteractionService의 동작을 검증합니다.
+pytest로 실행하거나 직접 스크립트로 실행할 수 있습니다.
+"""
 
 from app.schemas.survey import SurveyInteractionRequest
-from app.services.interaction_service import interaction_service
+from app.services.bedrock_service import BedrockService
+from app.services.interaction_service import InteractionService
 
 
 def main():
@@ -43,8 +44,11 @@ def main():
 
     print("\nProcessing request...")
 
-    # 3. Process Interaction
+    # 3. Create service instances and process interaction
     try:
+        bedrock_service = BedrockService()
+        interaction_service = InteractionService(bedrock_service)
+
         response = interaction_service.process_interaction(request)
         print("\n--- Interaction Result ---")
         print(f"Action: {response.action}")

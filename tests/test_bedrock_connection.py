@@ -1,9 +1,13 @@
-"""Bedrock 연결 테스트 스크립트"""
+"""Bedrock 연결 테스트 스크립트
+
+이 테스트는 실제 AWS Bedrock API 연결을 검증합니다.
+pytest로 실행하거나 직접 스크립트로 실행할 수 있습니다.
+"""
 
 import sys
 
 from app.core.config import settings
-from app.services.bedrock_service import bedrock_service
+from app.services.bedrock_service import BedrockService
 
 
 def test_bedrock_connection():
@@ -14,6 +18,9 @@ def test_bedrock_connection():
     print()
 
     try:
+        # 서비스 인스턴스 생성
+        bedrock_service = BedrockService()
+
         # 간단한 프롬프트로 테스트
         test_prompt = "Hello! Please respond with just 'Connection successful!' if you can read this."
         print(f"📤 프롬프트: {test_prompt}")

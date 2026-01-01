@@ -7,6 +7,8 @@ from fastapi import FastAPI
 from app.api.router import api_router
 from app.core.config import settings
 from app.core.exceptions import AIException, ai_exception_handler
+from app.services.bedrock_service import BedrockService
+from app.services.interaction_service import InteractionService
 
 logger = logging.getLogger(__name__)
 
@@ -24,12 +26,14 @@ def get_version() -> str:
 # 서버가 시작될 때 리소스를 초기화하고, 꺼질 때 정리합니다.
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # 시작 시 실행
+    # 🚀 Startup: 서비스를 app.state에 초기화
+    app.state.bedrock_service = BedrockService()
+    app.state.interaction_service = InteractionService(app.state.bedrock_service)
     logger.info(f"🔥 {settings.PROJECT_NAME} is starting up...")
 
     yield  # 서버 작동 중...
 
-    # 종료 시 실행
+    # 🛑 Shutdown: 리소스 정리
     logger.info("🛑 Shutting down...")
 
 
@@ -48,5 +52,5 @@ app.include_router(api_router)
 
 # [Health Check]
 @app.get("/health")
-def health_check():
+async def health_check():
     return {"status": "ok", "service": "ai-engine", "version": get_version()}
