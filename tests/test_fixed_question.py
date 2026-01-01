@@ -15,7 +15,7 @@ from app.schemas.fixed_question import FixedQuestionDraft, FixedQuestionFeedback
 class MockBedrockService:
     """BedrockService 모킹 클래스"""
 
-    def generate_fixed_questions(self, request):
+    async def generate_fixed_questions(self, request):
         return FixedQuestionDraft(
             questions=[
                 "게임의 전투 시스템에서 가장 재미있었던 점은 무엇인가요?",
@@ -26,7 +26,7 @@ class MockBedrockService:
             ]
         )
 
-    def generate_feedback_questions(self, request):
+    async def generate_feedback_questions(self, request):
         return FixedQuestionFeedback(
             candidates=[
                 "첫 번째 대안 질문입니다.",

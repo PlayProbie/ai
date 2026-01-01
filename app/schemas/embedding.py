@@ -2,7 +2,7 @@
 
 from enum import Enum
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class QuestionType(str, Enum):
@@ -15,6 +15,11 @@ class QuestionType(str, Enum):
 class QuestionAnswerPair(BaseModel):
     """하나의 Q&A 쌍"""
 
+    model_config = ConfigDict(
+        str_strip_whitespace=True,
+        populate_by_name=True,
+    )
+
     question: str = Field(..., description="질문 내용")
     answer: str = Field(..., description="답변 내용")
     question_type: QuestionType = Field(..., description="FIXED 또는 TAIL")
@@ -22,6 +27,11 @@ class QuestionAnswerPair(BaseModel):
 
 class InteractionEmbeddingRequest(BaseModel):
     """임베딩 요청 DTO (Server -> AI)"""
+
+    model_config = ConfigDict(
+        str_strip_whitespace=True,
+        populate_by_name=True,
+    )
 
     session_id: str = Field(..., description="세션 ID")
     survey_id: str = Field(..., description="설문 ID")
@@ -37,6 +47,11 @@ class InteractionEmbeddingRequest(BaseModel):
 
 class InteractionEmbeddingResponse(BaseModel):
     """임베딩 응답 DTO (AI -> Server)"""
+
+    model_config = ConfigDict(
+        str_strip_whitespace=True,
+        populate_by_name=True,
+    )
 
     embedding_id: str = Field(..., description="Chroma 문서 ID")
     success: bool = Field(..., description="성공 여부")

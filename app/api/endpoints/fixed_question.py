@@ -13,7 +13,7 @@ router = APIRouter()
 
 
 @router.post("/draft", response_model=FixedQuestionDraft)
-def generate_fixed_questions(
+async def generate_fixed_questions(
     request: FixedQuestionDraftCreate,
     service: BedrockService = Depends(get_bedrock_service),
 ):
@@ -32,11 +32,11 @@ def generate_fixed_questions(
         AIGenerationException: AI 응답 생성 실패 시
         AIModelNotAvailableException: AI 모델 사용 불가 시
     """
-    return service.generate_fixed_questions(request)
+    return await service.generate_fixed_questions(request)
 
 
 @router.post("/feedback", response_model=FixedQuestionFeedback)
-def generate_feedback_questions(
+async def generate_feedback_questions(
     request: FixedQuestionFeedbackCreate,
     service: BedrockService = Depends(get_bedrock_service),
 ):
@@ -57,4 +57,4 @@ def generate_feedback_questions(
         AIGenerationException: AI 응답 생성 실패 시
         AIModelNotAvailableException: AI 모델 사용 불가 시
     """
-    return service.generate_feedback_questions(request)
+    return await service.generate_feedback_questions(request)

@@ -1,7 +1,7 @@
 from enum import Enum
 from typing import Any
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class SurveyAction(str, Enum):
@@ -14,6 +14,11 @@ class AnswerAnalysis(BaseModel):
     LLM 구조화 출력용 스키마 (analyze_answer 메서드 반환값)
     """
 
+    model_config = ConfigDict(
+        str_strip_whitespace=True,
+        populate_by_name=True,
+    )
+
     action: SurveyAction = Field(..., description="AI의 판단 결과")
     analysis: str = Field(..., description="판단 이유")
 
@@ -22,6 +27,11 @@ class SurveyInteractionRequest(BaseModel):
     """
     설문/인터뷰 상호작용 요청 DTO (Server -> AI)
     """
+
+    model_config = ConfigDict(
+        str_strip_whitespace=True,
+        populate_by_name=True,
+    )
 
     session_id: str = Field(..., description="대화 세션 식별자 (DB/Memory Key)")
     user_answer: str = Field(..., description="사용자의 최근 답변")
@@ -43,6 +53,11 @@ class SurveyInteractionResponse(BaseModel):
     """
     설문/인터뷰 상호작용 응답 DTO (AI -> Server)
     """
+
+    model_config = ConfigDict(
+        str_strip_whitespace=True,
+        populate_by_name=True,
+    )
 
     action: SurveyAction = Field(
         ..., description="AI의 판단 결과 (꼬리질문 vs 다음질문)"
