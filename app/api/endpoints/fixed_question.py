@@ -41,17 +41,16 @@ async def generate_feedback_questions(
     service: BedrockService = Depends(get_bedrock_service),
 ):
     """
-    기존 질문과 피드백을 받아 수정된 질문 대안 3가지를 생성합니다.
+    기존 질문을 분석하여 대안 질문 3가지를 생성합니다.
 
     - **game_name**: 테스트할 게임의 이름
     - **game_genre**: 게임 장르
     - **game_context**: 게임 상세 정보
     - **test_purpose**: 테스트 목적
-    - **original_question**: 수정 대상이 되는 기존 질문
-    - **feedback**: 사용자의 수정 요청 사항 (피드백)
+    - **original_question**: 대안 질문을 생성할 기존 질문
 
     Returns:
-        FixedQuestionFeedback: 수정된 추천 대안 질문 리스트 (3개)
+        FixedQuestionFeedback: 추천 대안 질문 리스트 (3개)
 
     Raises:
         AIGenerationException: AI 응답 생성 실패 시

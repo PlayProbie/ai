@@ -97,7 +97,6 @@ class BedrockService:
                     "game_context": request.game_context,
                     "test_purpose": request.test_purpose,
                     "original_question": request.original_question,
-                    "feedback": request.feedback,
                 }
             )
 
