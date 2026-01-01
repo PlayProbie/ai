@@ -55,17 +55,16 @@ class BedrockService:
             logger.error(f"❌ Bedrock API 에러: {type(error).__name__}: {error}")
             raise AIGenerationException(f"Bedrock API 호출 실패: {error}") from error
 
-    def generate_fixed_questions(
+    async def generate_fixed_questions(
         self, request: FixedQuestionDraftCreate
     ) -> FixedQuestionDraft:
         """게임 정보 기반 고정 질문 생성."""
         try:
             prompt = ChatPromptTemplate.from_template(QUESTION_GENERATION_SYSTEM_PROMPT)
-            # 호출 시 LLM 생성
             structured_llm = self.chat_model.with_structured_output(FixedQuestionDraft)
             chain = prompt | structured_llm
 
-            return chain.invoke(
+            return await chain.ainvoke(
                 {
                     "game_name": request.game_name,
                     "game_genre": request.game_genre,
@@ -80,19 +79,18 @@ class BedrockService:
             logger.error(f"❌ 질문 생성 실패: {error}")
             raise AIGenerationException(f"질문 생성 중 오류 발생: {error}") from error
 
-    def generate_feedback_questions(
+    async def generate_feedback_questions(
         self, request: FixedQuestionFeedbackCreate
     ) -> FixedQuestionFeedback:
         """피드백을 반영한 대안 질문 3개 생성."""
         try:
             prompt = ChatPromptTemplate.from_template(QUESTION_FEEDBACK_SYSTEM_PROMPT)
-            # 호출 시 LLM 생성
             structured_llm = self.chat_model.with_structured_output(
                 FixedQuestionFeedback
             )
             chain = prompt | structured_llm
 
-            return chain.invoke(
+            return await chain.ainvoke(
                 {
                     "game_name": request.game_name,
                     "game_genre": request.game_genre,
