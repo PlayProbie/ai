@@ -73,7 +73,7 @@ jobs:
             "docker pull ${{ steps.login-ecr.outputs.registry }}/${{ secrets.ECR_REPOSITORY }}:develop-latest",
             "docker stop fastapi-dev-app || true",
             "docker rm fastapi-dev-app || true",
-            "docker run -d --name fastapi-dev-app -p 8000:8000 -e AWS_ACCESS_KEY_ID=${{ secrets.AWS_ACCESS_KEY_ID }} -e AWS_SECRET_ACCESS_KEY=${{ secrets.AWS_SECRET_ACCESS_KEY }} -e AWS_REGION=${{ secrets.AWS_REGION }} -e AWS_BEDROCK_API_KEY=${{ secrets.DEV_AWS_BEDROCK_API_KEY }} -e BEDROCK_MODEL_ID=${{ secrets.DEV_BEDROCK_MODEL_ID }} -e TEMPERATURE=${{ secrets.DEV_TEMPERATURE }} -e MAX_TOKENS=${{ secrets.DEV_MAX_TOKENS }} -e TOP_P=${{ secrets.DEV_TOP_P }} ${{ steps.login-ecr.outputs.registry }}/${{ secrets.ECR_REPOSITORY }}:develop-latest",
+            "docker run -d --name fastapi-dev-app -p 8000:8000 -e AWS_ACCESS_KEY_ID=${{ secrets.AWS_ACCESS_KEY_ID }} -e AWS_SECRET_ACCESS_KEY=${{ secrets.AWS_SECRET_ACCESS_KEY }} -e AWS_REGION=${{ secrets.AWS_REGION }} -e AWS_BEDROCK_API_KEY=${{ secrets.DEV_AWS_BEDROCK_API_KEY }} -e BEDROCK_MODEL_ID=${{ secrets.DEV_BEDROCK_MODEL_ID }} -e BEDROCK_EMBEDDING_MODEL_ID=${{ secrets.DEV_BEDROCK_EMBEDDING_MODEL_ID }} -e TEMPERATURE=${{ secrets.DEV_TEMPERATURE }} -e MAX_TOKENS=${{ secrets.DEV_MAX_TOKENS }} -e TOP_P=${{ secrets.DEV_TOP_P }} ${{ steps.login-ecr.outputs.registry }}/${{ secrets.ECR_REPOSITORY }}:develop-latest",
             "docker image prune -f"
           ]' \
           --region ${{ secrets.AWS_REGION }}
