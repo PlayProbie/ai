@@ -8,9 +8,11 @@ from app.core.config import settings
 from app.core.exceptions import AIGenerationException, AIModelNotAvailableException
 from app.core.prompts import (
     ANALYZE_ANSWER_PROMPT,
+    EVALUATE_QUALITY_PROMPT,
     GENERATE_TAIL_QUESTION_PROMPT,
     QUESTION_FEEDBACK_SYSTEM_PROMPT,
     QUESTION_GENERATION_SYSTEM_PROMPT,
+    VALIDATE_ANSWER_PROMPT,
 )
 from app.schemas.fixed_question import (
     FixedQuestionDraft,
@@ -18,7 +20,12 @@ from app.schemas.fixed_question import (
     FixedQuestionFeedback,
     FixedQuestionFeedbackCreate,
 )
-from app.schemas.survey import AnswerAnalysis
+from app.schemas.survey import (
+    AnswerAnalysis,
+    AnswerClassification,
+    AnswerQuality,
+    AnswerValidity,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -315,3 +322,124 @@ class BedrockService:
                             yield item
                 else:
                     yield content
+
+    # ============================================================
+    # 2단계 응답 분류 시스템 (Task 1)
+    # ============================================================
+
+    async def validate_answer_async(
+        self,
+        current_question: str,
+        user_answer: str,
+    ) -> dict:
+        """1단계: 응답 유효성 검사 (비동기)."""
+        try:
+            prompt = ChatPromptTemplate.from_template(VALIDATE_ANSWER_PROMPT)
+
+            # 유효성 검사용 임시 스키마
+            from pydantic import BaseModel
+
+            class ValidityResult(BaseModel):
+                validity: AnswerValidity
+                validity_reason: str
+            # langchain이 자동으로 json스키마를 llm에 주입
+            structured_llm = self.chat_model.with_structured_output(ValidityResult)
+            chain = prompt | structured_llm
+
+            result = await chain.ainvoke(
+                {
+                    "current_question": current_question,
+                    "user_answer": user_answer,
+                }
+            )
+
+            return {
+                "validity": result.validity.value,
+                "validity_reason": result.validity_reason,
+            }
+
+        except Exception as error:
+            logger.error(f"❌ 응답 유효성 검사 실패: {error}")
+            raise AIGenerationException(f"응답 유효성 검사 중 오류 발생: {error}") from error
+
+    async def evaluate_quality_async(
+        self,
+        current_question: str,
+        user_answer: str,
+    ) -> dict:
+        """2단계: 응답 품질 평가 (비동기). VALID일 때만 호출."""
+        try:
+            prompt = ChatPromptTemplate.from_template(EVALUATE_QUALITY_PROMPT)
+
+            # 품질 평가용 임시 스키마
+            from pydantic import BaseModel
+
+            class QualityResult(BaseModel):
+                thickness: str  # "LOW" or "HIGH"
+                richness: str  # "LOW" or "HIGH"
+                quality: AnswerQuality
+
+            structured_llm = self.chat_model.with_structured_output(QualityResult)
+            chain = prompt | structured_llm
+
+            result = await chain.ainvoke(
+                {
+                    "current_question": current_question,
+                    "user_answer": user_answer,
+                }
+            )
+
+            return {
+                "thickness": result.thickness,
+                "richness": result.richness,
+                "quality": result.quality.value,
+            }
+
+        except Exception as error:
+            logger.error(f"❌ 응답 품질 평가 실패: {error}")
+            raise AIGenerationException(f"응답 품질 평가 중 오류 발생: {error}") from error
+
+    async def classify_answer_async(
+        self,
+        current_question: str,
+        user_answer: str,
+    ) -> AnswerClassification:
+        """통합: 유효성 → 품질 순차 평가 (비동기)."""
+        try:
+            # 1단계: 유효성 검사
+            validity_result = await self.validate_answer_async(
+                current_question=current_question,
+                user_answer=user_answer,
+            )
+
+            validity = AnswerValidity(validity_result["validity"])
+            validity_reason = validity_result["validity_reason"]
+
+            # VALID가 아니면 품질 평가 스킵
+            if validity != AnswerValidity.VALID:
+                return AnswerClassification(
+                    validity=validity,
+                    validity_reason=validity_reason,
+                    quality=None,
+                    thickness=None,
+                    richness=None,
+                )
+
+            # 2단계: 품질 평가 (VALID일 때만)
+            quality_result = await self.evaluate_quality_async(
+                current_question=current_question,
+                user_answer=user_answer,
+            )
+
+            return AnswerClassification(
+                validity=validity,
+                validity_reason=validity_reason,
+                quality=AnswerQuality(quality_result["quality"]),
+                thickness=quality_result["thickness"],
+                richness=quality_result["richness"],
+            )
+
+        except Exception as error:
+            logger.error(f"❌ 응답 분류 실패: {error}")
+            raise AIGenerationException(f"응답 분류 중 오류 발생: {error}") from error
+

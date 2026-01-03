@@ -8,6 +8,29 @@ class SurveyAction(str, Enum):
     TAIL_QUESTION = "TAIL_QUESTION"
     PASS_TO_NEXT = "PASS_TO_NEXT"
 
+class AnswerValidity(str, Enum):
+    VALID = "VALID"
+    OFF_TOPIC = "OFF_TOPIC"
+    AMBIGUOUS = "AMBIGUOUS"
+    CONTRADICTORY = "CONTRADICTORY"
+    REFUSAL = "REFUSAL"
+    UNINTELLIGIBLE = "UNINTELLIGIBLE"
+
+class AnswerQuality(str, Enum):
+    EMPTY = "EMPTY"
+    GROUNDED = "GROUNDED"
+    FLOATING = "FLOATING"
+    FULL = "FULL"
+
+class AnswerClassification(BaseModel):
+    # 1: 유효성 검사
+    validity: AnswerValidity
+    validity_reason: str
+
+    # 2:품질 검사 (VALID일 때만)
+    quality: AnswerQuality | None = None
+    thickness: str | None = None # LOW / HIGH + 판단 근거
+    richness: str | None = None # LOW / HIGH + 판단 근거
 
 class AnswerAnalysis(BaseModel):
     """
