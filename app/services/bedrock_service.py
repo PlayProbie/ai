@@ -8,7 +8,9 @@ from app.core.config import settings
 from app.core.exceptions import AIGenerationException, AIModelNotAvailableException
 from app.core.prompts import (
     ANALYZE_ANSWER_PROMPT,
+    DECIDE_PROBE_ACTION_PROMPT,
     EVALUATE_QUALITY_PROMPT,
+    GENERATE_PROBE_QUESTION_PROMPT,
     GENERATE_TAIL_QUESTION_PROMPT,
     QUESTION_FEEDBACK_SYSTEM_PROMPT,
     QUESTION_GENERATION_SYSTEM_PROMPT,
@@ -25,6 +27,10 @@ from app.schemas.survey import (
     AnswerClassification,
     AnswerQuality,
     AnswerValidity,
+    CoverageLevel,
+    FatigueLevel,
+    NextAction,
+    ProbeDecision,
 )
 
 logger = logging.getLogger(__name__)
@@ -443,3 +449,82 @@ class BedrockService:
             logger.error(f"❌ 응답 분류 실패: {error}")
             raise AIGenerationException(f"응답 분류 중 오류 발생: {error}") from error
 
+    # ============================================================
+    # 피로도-커버리지 기반 다음 액션 판단 (Task 2)
+    # ============================================================
+
+    async def decide_probe_action_async(
+        self,
+        current_question: str,
+        answer_quality: str,
+        probe_count: int,
+        conversation_history: list[dict] | None = None,
+    ) -> ProbeDecision:
+        """피로도-커버리지 기반으로 프로빙 지속/다음 질문 판단."""
+        try:
+            prompt = ChatPromptTemplate.from_template(DECIDE_PROBE_ACTION_PROMPT)
+
+            from pydantic import BaseModel
+
+            class DecisionResult(BaseModel):
+                fatigue: FatigueLevel
+                coverage: CoverageLevel
+                action: NextAction
+                reason: str
+
+            structured_llm = self.chat_model.with_structured_output(DecisionResult)
+            chain = prompt | structured_llm
+
+            result = await chain.ainvoke(
+                {
+                    "current_question": current_question,
+                    "probe_count": probe_count,
+                    "answer_quality": answer_quality,
+                    "conversation_history": self._format_history(conversation_history),
+                }
+            )
+
+            return ProbeDecision(
+                fatigue=result.fatigue,
+                coverage=result.coverage,
+                action=result.action,
+                reason=result.reason,
+            )
+
+        except Exception as error:
+            logger.error(f"❌ 프로빙 액션 판단 실패: {error}")
+            raise AIGenerationException(f"프로빙 액션 판단 중 오류 발생: {error}") from error
+
+    async def generate_probe_question_async(
+        self,
+        current_question: str,
+        user_answer: str,
+        answer_quality: str,
+        conversation_history: list[dict] | None = None,
+    ) -> str:
+        """DICE 프로빙 기법 기반 꼬리질문 생성."""
+        try:
+            missing_aspect = {
+                "EMPTY": "상황(Describe)과 해석(Interpret) 모두",
+                "GROUNDED": "해석/감정(Interpret)",
+                "FLOATING": "구체적 상황(Describe)",
+            }.get(answer_quality, "추가 정보")
+
+            prompt = ChatPromptTemplate.from_template(GENERATE_PROBE_QUESTION_PROMPT)
+            chain = prompt | self.chat_model
+
+            result = await chain.ainvoke(
+                {
+                    "current_question": current_question,
+                    "user_answer": user_answer,
+                    "answer_quality": answer_quality,
+                    "missing_aspect": missing_aspect,
+                    "conversation_history": self._format_history(conversation_history),
+                }
+            )
+
+            return result.content
+
+        except Exception as error:
+            logger.error(f"❌ 프로빙 질문 생성 실패: {error}")
+            raise AIGenerationException(f"프로빙 질문 생성 중 오류 발생: {error}") from error
