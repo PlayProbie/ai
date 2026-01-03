@@ -32,6 +32,33 @@ class AnswerClassification(BaseModel):
     thickness: str | None = None # LOW / HIGH + 판단 근거
     richness: str | None = None # LOW / HIGH + 판단 근거
 
+
+class FatigueLevel(str, Enum):
+    """응답자 피로도 수준"""
+    LOW = "LOW"
+    HIGH = "HIGH"
+
+
+class CoverageLevel(str, Enum):
+    """현재 질문 커버리지 수준"""
+    LOW = "LOW"
+    HIGH = "HIGH"
+
+
+class NextAction(str, Enum):
+    """다음 액션 결정"""
+    CONTINUE_PROBE = "CONTINUE_PROBE"  # 프로빙 지속
+    NEXT_QUESTION = "NEXT_QUESTION"    # 다음 질문으로
+    END_SESSION = "END_SESSION"        # 세션 종료
+
+
+class ProbeDecision(BaseModel):
+    """피로도-커버리지 기반 다음 액션 판단 결과"""
+    fatigue: FatigueLevel
+    coverage: CoverageLevel
+    action: NextAction
+    reason: str
+
 class AnswerAnalysis(BaseModel):
     """
     LLM 구조화 출력용 스키마 (analyze_answer 메서드 반환값)
