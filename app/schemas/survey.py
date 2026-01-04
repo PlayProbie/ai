@@ -88,6 +88,7 @@ class SurveyInteractionRequest(BaseModel):
     current_question: str = Field(
         ..., description="사용자가 답변한 현재 질문 (Context)"
     )
+    probe_count: int = Field(0, description="현재 질문의 프로빙 횟수 (Server에서 관리)")
 
     # 선택적 메타데이터
     game_info: dict[str, Any] | None = Field(
@@ -102,6 +103,7 @@ class SurveyInteractionRequest(BaseModel):
 class SurveyInteractionResponse(BaseModel):
     """
     설문/인터뷰 상호작용 응답 DTO (AI -> Server)
+    Stateless: AI는 판단/생성만, Server가 상태 관리
     """
 
     model_config = ConfigDict(
@@ -109,10 +111,20 @@ class SurveyInteractionResponse(BaseModel):
         populate_by_name=True,
     )
 
-    action: SurveyAction = Field(
-        ..., description="AI의 판단 결과 (꼬리질문 vs 다음질문)"
+    # 1. 분류 결과
+    validity: AnswerValidity = Field(..., description="응답 유효성")
+    quality: AnswerQuality | None = Field(None, description="응답 품질 (VALID일 때)")
+
+    # 2. 판단 결과
+    action: NextAction = Field(
+        ..., description="AI 추천 액션 (CONTINUE_PROBE / NEXT_QUESTION / END_SESSION)"
     )
-    message: str | None = Field(
-        None, description="사용자에게 보여줄 꼬리 질문 (PASS 시 null)"
+
+    # 3. 꼬리질문 (action이 CONTINUE_PROBE일 때)
+    probe_question: str | None = Field(
+        None, description="생성된 꼬리질문 (CONTINUE_PROBE 시)"
     )
-    analysis: str | None = Field(None, description="답변 분석 내용 (로그용/디버깅용)")
+
+    # 4. 분석 정보 (디버깅용)
+    analysis: str | None = Field(None, description="판단 이유 (디버깅/로그용)")
+
