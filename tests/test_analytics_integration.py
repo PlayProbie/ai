@@ -29,9 +29,9 @@ from tests.fixtures.game_feedback_data import CONTROLS_SESSIONS, GRAPHICS_SESSIO
 class TestAnalyticsIntegration:
     """실제 AWS Bedrock을 사용한 E2E 통합 테스트"""
 
-    TEST_SURVEY_ID = "integration-test-survey"
-    GRAPHICS_QUESTION_ID = "graphics-question"  # 그래픽 호평 질문
-    CONTROLS_QUESTION_ID = "controls-question"  # 조작감 불만 질문
+    TEST_SURVEY_ID = 1
+    GRAPHICS_QUESTION_ID = 1  # Server의 Long 1
+    CONTROLS_QUESTION_ID = 2  # Server의 Long 2
 
     @pytest.fixture(scope="class")
     def embedding_service(self):
@@ -186,7 +186,9 @@ class TestAnalyticsIntegration:
 
         # SSE 스트림 수집
         events = []
-        async for event in analytics_service.stream_analysis("graphics", request):
+        async for event in analytics_service.stream_analysis(
+            1, request
+        ):  # question_id = 1 (int)
             events.append(event)
             print(event)  # 실시간 로그 출력 (-s 옵션 필요)
 
@@ -204,7 +206,7 @@ class TestAnalyticsIntegration:
         result = json.loads(data_line)
 
         # 기본 필드 검증
-        assert result["question_id"] == "graphics"
+        assert result["question_id"] == 1  # int type
         assert result["total_answers"] == 50
         assert "clusters" in result
         assert "sentiment" in result
@@ -258,7 +260,9 @@ class TestAnalyticsIntegration:
 
         # SSE 스트림 수집
         events = []
-        async for event in analytics_service.stream_analysis("controls", request):
+        async for event in analytics_service.stream_analysis(
+            2, request
+        ):  # question_id = 2 (int)
             events.append(event)
             print(event)  # 실시간 로그 출력 (-s 옵션 필요)
 
@@ -276,7 +280,7 @@ class TestAnalyticsIntegration:
         result = json.loads(data_line)
 
         # 기본 필드 검증
-        assert result["question_id"] == "controls"
+        assert result["question_id"] == 2  # int type
         assert result["total_answers"] == 50
         assert "clusters" in result
         assert "sentiment" in result

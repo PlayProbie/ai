@@ -107,5 +107,5 @@ class QuestionAnalysisOutput(BaseModel):
 class QuestionAnalysisRequest(BaseModel):
     """단일 질문 분석 API 요청 (ChromaDB 조회용)"""
 
-    survey_id: str = Field(..., description="설문 ID")
-    fixed_question_id: str = Field(..., description="고정 질문 ID")
+    survey_id: int = Field(..., description="설문 ID (Long)")
+    fixed_question_id: int = Field(..., description="고정 질문 ID (Long)")

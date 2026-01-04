@@ -9,12 +9,14 @@
 - Map-Reduce 패턴 LLM 처리
 """
 
+import asyncio
 import json
 import logging
 from collections.abc import AsyncGenerator
 
 import hdbscan
 import numpy as np
+from kiwipiepy import Kiwi
 from langchain_core.prompts import ChatPromptTemplate
 from sklearn.feature_extraction.text import CountVectorizer
 from umap import UMAP
@@ -57,13 +59,15 @@ class AnalyticsService:
     ):
         self.embedding_service = embedding_service
         self.bedrock_service = bedrock_service
+        self.kiwi = Kiwi()  # 한국어 형태소 분석기
+        logger.info("✅ Kiwi 형태소 분석기 초기화 완료")
 
     # =========================================================================
     # Step 1: Data Loading
     # =========================================================================
 
     def _query_answers_from_chromadb(
-        self, fixed_question_id: str, survey_id: str
+        self, fixed_question_id: int, survey_id: int
     ) -> dict:
         """ChromaDB에서 특정 질문에 대한 답변들 + 임베딩 조회"""
         try:
@@ -165,7 +169,7 @@ class AnalyticsService:
     def _extract_keywords_ctfidf(
         self, documents: list[str], cluster_indices: dict[int, list[int]]
     ) -> dict[int, list[str]]:
-        """c-TF-IDF로 각 클러스터의 대표 키워드 추출"""
+        """c-TF-IDF로 각 클러스터의 대표 키워드 추출 (Kiwi 형태소 분석 적용)"""
         if not documents or not cluster_indices:
             return {}
 
@@ -179,6 +183,19 @@ class AnalyticsService:
                         answers.append(line[2:].strip())
                 return " ".join(answers) if answers else doc
 
+            # Kiwi 토큰화 함수 (명사/동사/형용사만 추출)
+            def tokenize_korean(text: str) -> str:
+                """Kiwi로 한국어 토큰화 - 명사/동사/형용사만 추출"""
+                tokens = self.kiwi.tokenize(text)
+                # 명사(NNG, NNP), 동사(VV), 형용사(VA)만 추출
+                # 1글자 단어는 제외 (조사, 접속사 등)
+                keywords = [
+                    token.form
+                    for token in tokens
+                    if token.tag in ("NNG", "NNP", "VV", "VA") and len(token.form) > 1
+                ]
+                return " ".join(keywords)
+
             # 클러스터별로 답변만 합쳐서 '메타 문서' 생성
             cluster_docs = []
             cluster_labels = []
@@ -186,7 +203,9 @@ class AnalyticsService:
                 # 질문 제외, 답변만 추출하여 결합
                 answers_only = [extract_answers_only(documents[i]) for i in indices]
                 combined = " ".join(answers_only)
-                cluster_docs.append(combined)
+                # Kiwi로 토큰화
+                tokenized = tokenize_korean(combined)
+                cluster_docs.append(tokenized)
                 cluster_labels.append(label)
 
             if not cluster_docs:
@@ -195,8 +214,7 @@ class AnalyticsService:
             # CountVectorizer로 단어 빈도 계산
             vectorizer = CountVectorizer(
                 max_features=1000,
-                stop_words=None,  # todo: 한국어는 별도 처리 필요
-                ngram_range=(1, 2),
+                ngram_range=(1, 1),  # Kiwi가 이미 토큰화했으므로 unigram만
             )
             tf_matrix = vectorizer.fit_transform(cluster_docs)
             feature_names = vectorizer.get_feature_names_out()
@@ -283,7 +301,8 @@ class AnalyticsService:
 
     async def _analyze_sentiment_with_llm(self, documents: list[str]) -> dict:
         """LLM으로 클러스터 감정 분석"""
-        try:
+
+        async def _call_llm():
             prompt = ChatPromptTemplate.from_messages(
                 [
                     ("system", CLUSTER_ANALYSIS_SYSTEM_PROMPT),
@@ -291,11 +310,12 @@ class AnalyticsService:
                 ]
             )
             chain = prompt | self.bedrock_service.chat_model
-
             docs_text = "\n".join([f"- {doc}" for doc in documents])
             response = await chain.ainvoke({"answers": docs_text})
-
             return self._parse_llm_json(response.content)
+
+        try:
+            return await self._retry_llm_call(_call_llm)
 
         except Exception as error:
             logger.error(f"❌ 감정 분석 실패: {error}")
@@ -323,7 +343,7 @@ class AnalyticsService:
         if not documents:
             return "이상치 없음"
 
-        try:
+        async def _call_llm():
             prompt = ChatPromptTemplate.from_messages(
                 [
                     ("system", CLUSTER_ANALYSIS_SYSTEM_PROMPT),
@@ -331,12 +351,13 @@ class AnalyticsService:
                 ]
             )
             chain = prompt | self.bedrock_service.chat_model
-
-            docs_text = "\n".join([f"- {doc}" for doc in documents[:10]])  # 최대 10개
+            docs_text = "\n".join([f"- {doc}" for doc in documents[:10]])
             response = await chain.ainvoke({"answers": docs_text})
-
             result = self._parse_llm_json(response.content)
             return result.get("summary", "분석 불가")
+
+        try:
+            return await self._retry_llm_call(_call_llm)
 
         except Exception as error:
             logger.error(f"❌ 이상치 분석 실패: {error}")
@@ -351,7 +372,7 @@ class AnalyticsService:
         if not cluster_summaries:
             return ""
 
-        try:
+        async def _call_llm():
             prompt = ChatPromptTemplate.from_messages(
                 [
                     ("system", CLUSTER_ANALYSIS_SYSTEM_PROMPT),
@@ -359,12 +380,13 @@ class AnalyticsService:
                 ]
             )
             chain = prompt | self.bedrock_service.chat_model
-
             summaries_text = "\n".join([f"- {s}" for s in cluster_summaries])
             response = await chain.ainvoke({"cluster_summaries": summaries_text})
-
             result = self._parse_llm_json(response.content)
             return result.get("meta_summary", "")
+
+        try:
+            return await self._retry_llm_call(_call_llm)
 
         except Exception as error:
             logger.error(f"❌ 메타 요약 생성 실패: {error}")
@@ -373,6 +395,24 @@ class AnalyticsService:
     # =========================================================================
     # Helper Methods
     # =========================================================================
+
+    async def _retry_llm_call(self, llm_func, *args, max_retries=3, **kwargs):
+        """LLM 호출 재시도 로직 (exponential backoff)"""
+        for attempt in range(1, max_retries + 1):
+            try:
+                return await llm_func(*args, **kwargs)
+            except Exception as error:
+                if attempt == max_retries:
+                    logger.error(
+                        f"❌ LLM 호출 최종 실패 ({max_retries}회 시도): {error}"
+                    )
+                    raise
+                wait_time = 2 ** (attempt - 1)  # 1초, 2초, 4초
+                logger.warning(
+                    f"⚠️ LLM 호출 실패 ({attempt}/{max_retries} 시도), "
+                    f"{wait_time}초 후 재시도... 오류: {error}"
+                )
+                await asyncio.sleep(wait_time)
 
     def _parse_llm_json(self, content) -> dict:
         """LLM 응답에서 JSON 파싱"""
@@ -461,7 +501,7 @@ class AnalyticsService:
     # =========================================================================
 
     async def stream_analysis(
-        self, question_id: str, request: QuestionAnalysisRequest
+        self, question_id: int, request: QuestionAnalysisRequest
     ) -> AsyncGenerator[str, None]:
         """분석 결과를 SSE 스트리밍으로 반환"""
         try:
@@ -587,7 +627,7 @@ class AnalyticsService:
             sentiment_stats = self._calculate_sentiment_stats(cluster_infos)
 
             output = QuestionAnalysisOutput(
-                question_id=int(question_id),
+                question_id=question_id,
                 total_answers=total_count,
                 clusters=cluster_infos,
                 sentiment=sentiment_stats,
