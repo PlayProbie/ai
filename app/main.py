@@ -7,6 +7,7 @@ from fastapi import FastAPI
 from app.api.router import api_router
 from app.core.config import settings
 from app.core.exceptions import AIException, ai_exception_handler
+from app.services.analytics_service import AnalyticsService
 from app.services.bedrock_service import BedrockService
 from app.services.embedding_service import EmbeddingService
 from app.services.interaction_service import InteractionService
@@ -31,6 +32,9 @@ async def lifespan(app: FastAPI):
     app.state.bedrock_service = BedrockService()
     app.state.embedding_service = EmbeddingService()
     app.state.interaction_service = InteractionService(app.state.bedrock_service)
+    app.state.analytics_service = AnalyticsService(
+        app.state.embedding_service, app.state.bedrock_service
+    )
     logger.info(f"🔥 {settings.PROJECT_NAME} is starting up...")
 
     yield  # 서버 작동 중...
