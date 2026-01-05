@@ -14,7 +14,7 @@ def get_analytics_service(request: Request) -> AnalyticsService:
     return request.app.state.analytics_service
 
 
-@router.post("/questions/{question_id}/analyze")
+@router.post("/questions/{question_id}")
 async def analyze_question(
     question_id: str,
     request: QuestionAnalysisRequest,

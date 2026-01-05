@@ -593,6 +593,7 @@ class AnalyticsService:
                         answer_ids=[ids[i] for i in indices],
                         satisfaction=sentiment.get("satisfaction", 50),
                         keywords=keywords,
+                        representative_answer_ids=[ids[i] for i in rep_indices],
                     )
                 )
 
