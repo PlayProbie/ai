@@ -104,6 +104,8 @@ line-ending = "auto"
 pythonpath = ["."]
 # 테스트 디렉토리
 testpaths = ["tests"]
-asyncio_mode = "auto"
-asyncio_default_fixture_loop_scope = "function"
+
+[tool.pytest_asyncio]
+mode = "auto"
+default_fixture_loop_scope = "function"
 

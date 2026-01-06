@@ -62,6 +62,10 @@ class AnalyticsService:
         self.kiwi = Kiwi()  # 한국어 형태소 분석기
         logger.info("✅ Kiwi 형태소 분석기 초기화 완료")
 
+        # 동시성 제어 (Bedrock Throttling 방지)
+        # 동시에 최대 5개의 LLM 분석 작업만 수행
+        self.concurrency_limit = asyncio.Semaphore(5)
+
     # =========================================================================
     # Step 1: Data Loading
     # =========================================================================
@@ -71,13 +75,11 @@ class AnalyticsService:
     ) -> dict:
         """ChromaDB에서 특정 질문에 대한 답변들 + 임베딩 조회"""
         try:
+            # ChromaDB 버전 호환성을 위해 단일 조건으로 조회 후 Python에서 필터링
+            # $and 연산자가 일부 버전에서 문제를 일으킬 수 있음
+            # TODO: ChromaDB 버전 업그레이드 후 $and 연산자 사용
             results = self.embedding_service.collection.get(
-                where={
-                    "$and": [
-                        {"fixed_question_id": fixed_question_id},
-                        {"survey_id": survey_id},
-                    ]
-                },
+                where={"fixed_question_id": fixed_question_id},
                 include=["documents", "metadatas", "embeddings"],
             )
 
@@ -87,8 +89,28 @@ class AnalyticsService:
                 )
                 return {"ids": [], "documents": [], "metadatas": [], "embeddings": []}
 
-            logger.info(f"✅ ChromaDB 조회 완료: {len(results['ids'])}개 답변")
-            return results
+            # survey_id로 추가 필터링 (Python에서 처리)
+            filtered_indices = [
+                i
+                for i, meta in enumerate(results["metadatas"])
+                if meta.get("survey_id") == survey_id
+            ]
+
+            if not filtered_indices:
+                logger.warning(
+                    f"⚠️ survey_id 필터 후 답변 없음: question_id={fixed_question_id}, survey_id={survey_id}"
+                )
+                return {"ids": [], "documents": [], "metadatas": [], "embeddings": []}
+
+            filtered_results = {
+                "ids": [results["ids"][i] for i in filtered_indices],
+                "documents": [results["documents"][i] for i in filtered_indices],
+                "metadatas": [results["metadatas"][i] for i in filtered_indices],
+                "embeddings": [results["embeddings"][i] for i in filtered_indices],
+            }
+
+            logger.info(f"✅ ChromaDB 조회 완료: {len(filtered_results['ids'])}개 답변")
+            return filtered_results
 
         except Exception as error:
             logger.error(f"❌ ChromaDB 조회 실패: {error}")
@@ -311,7 +333,10 @@ class AnalyticsService:
             )
             chain = prompt | self.bedrock_service.chat_model
             docs_text = "\n".join([f"- {doc}" for doc in documents])
-            response = await chain.ainvoke({"answers": docs_text})
+
+            async with self.concurrency_limit:
+                response = await chain.ainvoke({"answers": docs_text})
+
             return self._parse_llm_json(response.content)
 
         try:
@@ -352,7 +377,10 @@ class AnalyticsService:
             )
             chain = prompt | self.bedrock_service.chat_model
             docs_text = "\n".join([f"- {doc}" for doc in documents[:10]])
-            response = await chain.ainvoke({"answers": docs_text})
+
+            async with self.concurrency_limit:
+                response = await chain.ainvoke({"answers": docs_text})
+
             result = self._parse_llm_json(response.content)
             return result.get("summary", "분석 불가")
 
@@ -381,7 +409,10 @@ class AnalyticsService:
             )
             chain = prompt | self.bedrock_service.chat_model
             summaries_text = "\n".join([f"- {s}" for s in cluster_summaries])
-            response = await chain.ainvoke({"cluster_summaries": summaries_text})
+
+            async with self.concurrency_limit:
+                response = await chain.ainvoke({"cluster_summaries": summaries_text})
+
             result = self._parse_llm_json(response.content)
             return result.get("meta_summary", "")
 
@@ -426,8 +457,9 @@ class AnalyticsService:
 
         try:
             return json.loads(content.strip())
-        except json.JSONDecodeError:
-            logger.warning("⚠️ JSON 파싱 실패")
+        except json.JSONDecodeError as e:
+            logger.warning(f"⚠️ JSON 파싱 실패: {e}")
+            logger.debug(f"파싱 실패한 내용: {content[:500]}")  # 처음 500자만 로깅
             return {}
 
     def _map_emotion_type(self, emotion_str: str) -> EmotionType:
@@ -505,6 +537,10 @@ class AnalyticsService:
     ) -> AsyncGenerator[str, None]:
         """분석 결과를 SSE 스트리밍으로 반환"""
         try:
+            logger.info(
+                f"🔍 분석 시작: Question {question_id}, Survey {request.survey_id}, FixedQuestion {request.fixed_question_id}"
+            )
+
             # Step 1: Progress - Loading
             yield f"event: progress\ndata: {json.dumps({'step': 'loading', 'progress': 10})}\n\n"
 
@@ -540,11 +576,12 @@ class AnalyticsService:
                 documents, cluster_indices
             )
 
-            # Step 6: 클러스터별 LLM 분석
+            # Step 6: 클러스터별 LLM 분석 (병렬 처리)
             yield f"event: progress\ndata: {json.dumps({'step': 'analyzing', 'progress': 60})}\n\n"
 
-            cluster_infos = []
-            cluster_summaries = []  # Map-Reduce용
+            # 클러스터별 메타데이터 사전 준비
+            cluster_metadata = []
+            llm_tasks = []
 
             for cluster_label, indices in cluster_indices.items():
                 # MMR로 대표 문서 선정
@@ -553,14 +590,46 @@ class AnalyticsService:
                 )
                 rep_docs = [documents[i] for i in rep_indices]
 
-                # LLM 감정 분석
-                sentiment = await self._analyze_sentiment_with_llm(rep_docs)
+                # 메타데이터 저장 (병렬 처리 후 결과 조합용)
+                cluster_metadata.append(
+                    {
+                        "cluster_label": cluster_label,
+                        "indices": indices,
+                        "rep_indices": rep_indices,
+                        "count": len(indices),
+                        "percentage": round((len(indices) / total_count) * 100),
+                        "keywords": keywords_by_cluster.get(cluster_label, []),
+                    }
+                )
 
-                count = len(indices)
-                percentage = round((count / total_count) * 100)
-                keywords = keywords_by_cluster.get(cluster_label, [])
+                # LLM 감정 분석 태스크 생성
+                llm_tasks.append(self._analyze_sentiment_with_llm(rep_docs))
 
-                summary = sentiment.get("summary", f"클러스터 {cluster_label + 1}")
+            # 모든 클러스터 분석을 병렬로 실행
+            logger.info(f"⏳ 병렬 LLM 분석 시작: {len(llm_tasks)}개 클러스터")
+            sentiments = await asyncio.gather(*llm_tasks, return_exceptions=True)
+            logger.info(f"✅ 병렬 LLM 분석 완료: {len(sentiments)}개 결과")
+
+            # 예외 체크 및 기본값으로 대체
+            for i, result in enumerate(sentiments):
+                if isinstance(result, Exception):
+                    logger.error(
+                        f"❌ 클러스터 {i} 분석 예외: {type(result).__name__}: {result}"
+                    )
+                    sentiments[i] = {
+                        "summary": "분석 실패",
+                        "emotion_detail": str(result),
+                        "satisfaction": 50,
+                        "geq_scores": {},
+                    }
+
+            cluster_infos = []
+            cluster_summaries = []  # Map-Reduce용
+
+            for metadata, sentiment in zip(cluster_metadata, sentiments, strict=True):
+                summary = sentiment.get(
+                    "summary", f"클러스터 {metadata['cluster_label'] + 1}"
+                )
                 cluster_summaries.append(summary)
 
                 # GEQ 점수 파싱
@@ -585,25 +654,30 @@ class AnalyticsService:
                 cluster_infos.append(
                     ClusterInfo(
                         summary=summary,
-                        percentage=percentage,
-                        count=count,
+                        percentage=metadata["percentage"],
+                        count=metadata["count"],
                         emotion_type=self._map_emotion_type(dominant_emotion),
                         geq_scores=geq_scores,
                         emotion_detail=sentiment.get("emotion_detail", ""),
-                        answer_ids=[ids[i] for i in indices],
+                        answer_ids=[ids[i] for i in metadata["indices"]],
                         satisfaction=sentiment.get("satisfaction", 50),
-                        keywords=keywords,
-                        representative_answer_ids=[ids[i] for i in rep_indices],
+                        keywords=metadata["keywords"],
+                        representative_answer_ids=[
+                            ids[i] for i in metadata["rep_indices"]
+                        ],
                     )
                 )
 
             # 비중 순 정렬
             cluster_infos.sort(key=lambda c: c.count, reverse=True)
 
-            # Step 7: 이상치 분석
-            yield f"event: progress\ndata: {json.dumps({'step': 'analyzing_outliers', 'progress': 80})}\n\n"
+            # Step 7 & 8: 이상치 분석 + 메타 요약 (병렬 처리)
+            yield f"event: progress\ndata: {json.dumps({'step': 'finalizing', 'progress': 85})}\n\n"
 
-            outlier_info = None
+            # 병렬 태스크 준비
+            outlier_task = None
+            outlier_docs = []
+            rep_outlier_indices = []
 
             if outlier_indices:
                 # 이상치 중에서도 다양한 '대표 이상치' 선정 (MMR 적용)
@@ -612,17 +686,25 @@ class AnalyticsService:
                     embeddings, outlier_indices, n_docs=10
                 )
                 outlier_docs = [documents[i] for i in rep_outlier_indices]
+                outlier_task = self._analyze_outliers_with_llm(outlier_docs)
 
-                outlier_summary = await self._analyze_outliers_with_llm(outlier_docs)
+            meta_task = self._generate_meta_summary(cluster_summaries)
+
+            # 이상치 분석과 메타 요약을 병렬로 실행
+            if outlier_task:
+                outlier_summary, meta_summary = await asyncio.gather(
+                    outlier_task, meta_task
+                )
                 outlier_info = OutlierInfo(
                     count=len(outlier_indices),
                     summary=outlier_summary,
                     answer_ids=[ids[i] for i in outlier_indices],
                 )
+            else:
+                meta_summary = await meta_task
+                outlier_info = None
 
-            # Step 8: Map-Reduce 메타 요약
-            yield f"event: progress\ndata: {json.dumps({'step': 'summarizing', 'progress': 90})}\n\n"
-            meta_summary = await self._generate_meta_summary(cluster_summaries)
+            logger.info("✅ 이상치 분석 + 메타 요약 병렬 처리 완료")
 
             # Step 9: 전체 통계 계산
             sentiment_stats = self._calculate_sentiment_stats(cluster_infos)
@@ -636,10 +718,29 @@ class AnalyticsService:
                 meta_summary=meta_summary if meta_summary else None,
             )
 
-            yield f"event: done\ndata: {output.model_dump_json()}\n\n"
+            logger.info(f"📝 분석 결과 직렬화 시작: Question {question_id}")
+            try:
+                output_json = output.model_dump_json()
+                logger.info(
+                    f"📤 SSE done 이벤트 전송: Question {question_id}, 크기={len(output_json)}바이트"
+                )
+                yield f"event: done\ndata: {output_json}\n\n"
+                logger.info(f"✅ 분석 완료: Question {question_id}")
+            except Exception as serialize_error:
+                logger.error(
+                    f"❌ 직렬화 실패: {type(serialize_error).__name__}: {serialize_error}",
+                    exc_info=True,
+                )
+                yield 'event: error\ndata: {"message": "결과 직렬화 실패"}\n\n'
 
         except AIGenerationException as error:
+            logger.error(
+                f"❌ AI 생성 오류 (Question {question_id}): {error}", exc_info=True
+            )
             yield f"event: error\ndata: {json.dumps({'message': str(error)})}\n\n"
         except Exception as error:
-            logger.error(f"❌ 분석 스트리밍 실패: {error}")
+            logger.error(
+                f"❌ 분석 스트리밍 실패 (Question {question_id}): {error}",
+                exc_info=True,
+            )
             yield f"event: error\ndata: {json.dumps({'message': '분석 중 오류가 발생했습니다.'})}\n\n"
