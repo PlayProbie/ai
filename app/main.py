@@ -1,8 +1,9 @@
 import logging
+import sys
 from contextlib import asynccontextmanager
 from importlib.metadata import PackageNotFoundError, version
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 
 from app.api.router import api_router
 from app.core.config import settings
@@ -12,6 +13,12 @@ from app.services.bedrock_service import BedrockService
 from app.services.embedding_service import EmbeddingService
 from app.services.interaction_service import InteractionService
 
+# 로깅 설정 - uvicorn과 함께 동작하도록
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+    handlers=[logging.StreamHandler(sys.stdout)],
+)
 logger = logging.getLogger(__name__)
 
 
@@ -35,7 +42,6 @@ async def lifespan(app: FastAPI):
     app.state.analytics_service = AnalyticsService(
         app.state.embedding_service, app.state.bedrock_service
     )
-    logger.info(f"🔥 {settings.PROJECT_NAME} is starting up...")
 
     yield  # 서버 작동 중...
 
@@ -51,6 +57,22 @@ app = FastAPI(
 
 # Exception Handler 등록
 app.add_exception_handler(AIException, ai_exception_handler)
+
+
+# 요청 로깅 미들웨어
+@app.middleware("http")
+async def log_requests(request: Request, call_next):
+    logger.info(f"🌐 요청 수신: {request.method} {request.url.path}")
+    try:
+        response = await call_next(request)
+        logger.info(
+            f"✅ 응답 전송: {request.method} {request.url.path} - {response.status_code}"
+        )
+        return response
+    except Exception as e:
+        logger.error(f"❌ 요청 처리 실패: {request.method} {request.url.path} - {e}")
+        raise
+
 
 # API 라우터 등록
 app.include_router(api_router)
