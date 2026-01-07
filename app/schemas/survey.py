@@ -82,6 +82,18 @@ class SessionEndRequest(BaseModel):
     game_info: dict[str, Any] | None = Field(None, description="게임 정보")
 
 
+class ClosingQuestionRequest(BaseModel):
+    """마지막 오픈에드 질문 요청 (POST /surveys/closing-question)"""
+    model_config = ConfigDict(
+        str_strip_whitespace=True,
+        populate_by_name=True,
+    )
+
+    session_id: str = Field(..., description="세션 UUID")
+    end_reason: str = Field(..., description="종료 이유 (ALL_DONE, TIME_LIMIT, FATIGUE, COVERAGE)")
+    game_info: dict[str, Any] | None = Field(None, description="게임 정보")
+
+
 # =============================================================================
 # Interaction Request/Response (기존 /surveys/interaction용)
 # =============================================================================

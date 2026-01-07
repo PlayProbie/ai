@@ -24,7 +24,7 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 # 피로도 판단 기준
-MIN_ANSWER_LENGTH_FOR_FATIGUE = 10  # 답변이 이 길이 미만이면 피로 신호
+MAX_WORDS_FOR_FATIGUE = 3  # 답변이 3단어 이하이면 피로 신호
 CONSECUTIVE_SHORT_ANSWERS_THRESHOLD = 3  # 연속 짧은 답변 횟수
 
 
@@ -161,17 +161,22 @@ class InteractionService:
         테스터 피로도를 휴리스틱으로 체크.
         
         기준:
-        - 답변이 너무 짧음 (10자 미만)
-        - 연속으로 짧은 답변 (대화 기록에서 확인)
+        - 답변이 3단어 이하
+        - 연속으로 3회 짧은 답변 (대화 기록에서 확인)
         """
-        current_answer_short = len(request.user_answer.strip()) < MIN_ANSWER_LENGTH_FOR_FATIGUE
+        def is_short_answer(text: str) -> bool:
+            """3단어 이하인지 체크"""
+            words = text.strip().split()
+            return len(words) <= MAX_WORDS_FOR_FATIGUE
+        
+        current_answer_short = is_short_answer(request.user_answer)
 
         # 대화 기록에서 연속 짧은 답변 체크
         consecutive_short = 0
         if request.conversation_history:
             for entry in reversed(request.conversation_history):
                 answer = entry.get("answer", "")
-                if len(answer.strip()) < MIN_ANSWER_LENGTH_FOR_FATIGUE:
+                if is_short_answer(answer):
                     consecutive_short += 1
                 else:
                     break
@@ -183,7 +188,7 @@ class InteractionService:
 
         if fatigued:
             logger.info(
-                f"😓 Fatigue detected: {consecutive_short} consecutive short answers"
+                f"😓 Fatigue detected: {consecutive_short} consecutive short answers (3 words or less)"
             )
 
         return {

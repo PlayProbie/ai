@@ -53,6 +53,20 @@ OPENING_QUESTION_PROMPT = """당신은 게임 플레이테스트 인터뷰어입
 
 오프닝 질문:"""
 
+CLOSING_QUESTION_PROMPT = """당신은 게임 플레이테스트 인터뷰어입니다.
+인터뷰를 마무리하기 전, 테스터에게 마지막으로 하고 싶은 말을 물어보세요.
+
+게임 이름: {game_name}
+종료 사유: {end_reason}
+
+요구사항:
+- "마지막으로 하고 싶은 말씀이 있으신가요?" 느낌의 자연스러운 질문
+- 개방형 질문으로 테스터가 자유롭게 의견을 말할 수 있도록
+- 1문장으로 간결하게
+
+마지막 질문:"""
+
+
 CLOSING_PROMPT_MAP = {
     EndReason.ALL_DONE: """모든 질문이 완료되었습니다.
 테스터에게 감사 인사와 함께 따뜻한 마무리 멘트를 해주세요.
@@ -172,6 +186,56 @@ class SessionService:
 
         except Exception as e:
             logger.error(f"❌ Opening stream error: {e}")
+            yield self._sse_event("error", {"message": str(e)})
+
+    # =========================================================================
+    # Phase 4.5: 마지막 오픈에드 질문 (종료 전)
+    # =========================================================================
+
+    async def stream_closing_question(
+        self, session_id: str, end_reason: str, game_info: dict | None = None
+    ) -> AsyncGenerator[str, None]:
+        """
+        종료 전 마지막 오픈에드 질문을 SSE 스트리밍으로 제공.
+        
+        이벤트 순서:
+        1. start: 처리 시작
+        2. continue (반복): 토큰 스트리밍
+        3. done: 완료 + 전체 질문 텍스트
+        """
+        try:
+            yield self._sse_event("start", {"status": "processing", "phase": "closing_question"})
+
+            game_info = game_info or {}
+            game_name = game_info.get("name", "게임")
+
+            # 종료 사유를 한글로 변환
+            end_reason_kr = {
+                "ALL_DONE": "모든 질문 완료",
+                "TIME_LIMIT": "시간 제한",
+                "FATIGUE": "피로도 감지",
+                "COVERAGE": "커버리지 충족",
+            }.get(end_reason, end_reason)
+
+            full_message = ""
+            async for token in self._stream_prompt(
+                CLOSING_QUESTION_PROMPT,
+                {"game_name": game_name, "end_reason": end_reason_kr},
+            ):
+                full_message += token
+                yield self._sse_event("continue", {"content": token})
+
+            # 완료 이벤트
+            yield self._sse_event("done", {
+                "status": "completed",
+                "phase": "closing_question",
+                "question_text": full_message.strip(),
+                "question_type": "CLOSING_QUESTION",
+                "end_reason": end_reason,
+            })
+
+        except Exception as e:
+            logger.error(f"❌ Closing question stream error: {e}")
             yield self._sse_event("error", {"message": str(e)})
 
     # =========================================================================
