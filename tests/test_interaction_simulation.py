@@ -32,7 +32,6 @@ def main():
             "game_name": "Epic Fantasy RPG",
             "game_genre": "RPG",
             "game_context": "판타지 세계관의 정통 RPG. 던전 탐험과 퀘스트 중심.",
-            "test_purpose": "스토리 몰입도 및 전투 밸런스 확인",
         },
         conversation_history=[
             {

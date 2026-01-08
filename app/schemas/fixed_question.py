@@ -1,4 +1,6 @@
-from pydantic import BaseModel, ConfigDict, Field
+from typing import Optional
+
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
 class FixedQuestionDraftCreate(BaseModel):
@@ -17,9 +19,27 @@ class FixedQuestionDraftCreate(BaseModel):
         ..., description="게임 장르 (Enum Value: shooter, rpg, etc.)"
     )
     game_context: str = Field(..., description="게임 상세 정보 및 배경 설정 (500자+)")
-    test_purpose: str = Field(
-        ..., description="테스트 목적 (Enum Value: gameplay-validation, etc.)"
+    theme_priorities: list[str] = Field(
+        ...,
+        min_length=1,
+        max_length=3,
+        description="테스트 대주제 우선순위 (1~3순위, 순서대로)",
     )
+    theme_details: Optional[dict[str, list[str]]] = Field(
+        default=None, description="각 대주제별 소주제/키워드 (선택)"
+    )
+
+    @field_validator("theme_priorities")
+    @classmethod
+    def validate_theme_priorities(cls, v: list[str]) -> list[str]:
+        """중복 제거 및 빈 문자열 필터링"""
+        seen = set()
+        result = []
+        for theme in v:
+            if theme and theme not in seen:
+                seen.add(theme)
+                result.append(theme)
+        return result[:3]  # 최대 3개
 
 
 class FixedQuestionDraft(BaseModel):
@@ -52,7 +72,27 @@ class FixedQuestionFeedbackCreate(BaseModel):
     game_name: str = Field(..., description="테스트할 게임의 이름")
     game_genre: str = Field(..., description="게임 장르")
     game_context: str = Field(..., description="게임 상세 정보")
-    test_purpose: str = Field(..., description="테스트 목적")
+    theme_priorities: list[str] = Field(
+        ...,
+        min_length=1,
+        max_length=3,
+        description="테스트 대주제 우선순위 (1~3순위, 순서대로)",
+    )
+    theme_details: Optional[dict[str, list[str]]] = Field(
+        default=None, description="각 대주제별 소주제/키워드 (선택)"
+    )
+
+    @field_validator("theme_priorities")
+    @classmethod
+    def validate_theme_priorities(cls, v: list[str]) -> list[str]:
+        """중복 제거 및 빈 문자열 필터링"""
+        seen = set()
+        result = []
+        for theme in v:
+            if theme and theme not in seen:
+                seen.add(theme)
+                result.append(theme)
+        return result[:3]  # 최대 3개
 
     # Target Question
     original_question: str = Field(..., description="대안 질문을 생성할 기존 질문")
