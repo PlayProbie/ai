@@ -28,7 +28,6 @@ QUESTION_FEEDBACK_SYSTEM_PROMPT = """
 - 이름: {game_name}
 - 장르: {game_genre}
 - 상세 설명: {game_context}
-- 상세 설명: {game_context}
 - 테스트 테마 및 우선순위:
 {theme_info}
 
