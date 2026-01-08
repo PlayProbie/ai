@@ -178,7 +178,7 @@ class TestAnalyticsService:
             "embeddings": [],
         }
 
-        result = analytics_service._query_answers_from_chromadb("q1", "s1_uuid")
+        result = analytics_service._query_answers_from_chromadb(1, "s1_uuid")
 
         assert result["ids"] == []
         mock_embedding_service.collection.get.assert_called_once()
@@ -197,7 +197,7 @@ class TestAnalyticsService:
             "embeddings": [[0.1, 0.2], [0.3, 0.4]],
         }
 
-        result = analytics_service._query_answers_from_chromadb("q1", "s1_uuid")
+        result = analytics_service._query_answers_from_chromadb(1, "s1_uuid")
 
         assert len(result["embeddings"]) == 2
         call_args = mock_embedding_service.collection.get.call_args

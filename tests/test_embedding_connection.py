@@ -40,8 +40,8 @@ def test_embedding_connection():
         print("3️⃣ Chroma 저장 테스트...")
         request = InteractionEmbeddingRequest(
             session_id="test-session",
-            survey_uuid="test-uuid",
-            fixed_question_id="test-fq-001",
+            survey_uuid="a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+            fixed_question_id=1,
             qa_pairs=[
                 QuestionAnswerPair(
                     question="게임의 그래픽이 마음에 드셨나요?",
