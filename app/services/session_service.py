@@ -26,16 +26,15 @@ logger = logging.getLogger(__name__)
 # Prompts
 # =============================================================================
 
-GREETING_PROMPT = """당신은 게임 플레이테스트 인터뷰어입니다.
-테스터에게 친근하고 따뜻한 인사말을 해주세요.
-
+GREETING_PROMPT = """게임 플레이테스트에 온 테스터에게 친근한 인사를 해주세요.
 게임 이름: {game_name}
-테스터 정보: {tester_info}
 
 요구사항:
-- 1-2문장으로 간결하게
-- 테스터를 환영하고 감사 표현
-- 편안한 분위기 조성
+- 1문장, 20자 이내
+- 이모지 1-2개 사용 (👋, 🎮, 😊)
+- 친근하고 캐주얼한 말투
+- "감사합니다" 사용 금지
+- 예시: "안녕하세요! 👋 {game_name} 인터뷰를 시작해볼게요 🎮"
 
 인사말:"""
 
@@ -132,56 +131,33 @@ class SessionService:
         self, request: SessionStartRequest
     ) -> AsyncGenerator[str, None]:
         """
-        인터뷰 시작 시 인사말 + 오프닝 질문을 SSE 스트리밍으로 제공.
-        
+        인터뷰 시작 시 인사말만 SSE 스트리밍으로 제공.
+        첫번째 고정질문은 Spring이 DB에서 조회하여 전송.
+
         이벤트 순서:
         1. start: 처리 시작
-        2. continue (반복): 토큰 스트리밍
-        3. done: 완료 + 전체 질문 텍스트
+        2. greeting_continue (반복): 인사말 토큰 스트리밍
+        3. greeting_done: 인사말 완료
         """
         try:
-            yield self._sse_event("start", {"status": "processing", "phase": "opening"})
+            yield self._sse_event("start", {"status": "processing"})
 
             game_info = request.game_info or {}
             game_name = game_info.get("name", "게임")
-            game_genre = game_info.get("genre", "")
-            game_context = game_info.get("context", "")
 
-            tester_info = ""
-            if request.tester_profile:
-                tester_info = f"연령대: {request.tester_profile.age_group or '미제공'}, 선호 장르: {request.tester_profile.prefer_genre or '미제공'}"
+            greeting = ""
 
-            full_message = ""
-
-            # 1. 인사말 생성 및 스트리밍
+            # 인사말 생성 및 스트리밍
             async for token in self._stream_prompt(
                 GREETING_PROMPT,
-                {"game_name": game_name, "tester_info": tester_info},
+                {"game_name": game_name},
             ):
-                full_message += token
-                yield self._sse_event("continue", {"content": token})
+                greeting += token
+                yield self._sse_event("greeting_continue", {"content": token})
 
-            full_message += "\n\n"
-            yield self._sse_event("continue", {"content": "\n\n"})
-
-            # 2. 오프닝 질문 생성 및 스트리밍
-            async for token in self._stream_prompt(
-                OPENING_QUESTION_PROMPT,
-                {
-                    "game_name": game_name,
-                    "game_genre": game_genre,
-                    "game_context": game_context,
-                },
-            ):
-                full_message += token
-                yield self._sse_event("continue", {"content": token})
-
-            # 완료 이벤트
-            yield self._sse_event("done", {
-                "status": "completed",
-                "phase": InterviewPhase.OPENING.value,
-                "question_text": full_message.strip(),
-                "question_type": "OPENING",
+            # 인사말 완료 - 첫번째 질문은 Spring이 DB에서 조회하여 전송
+            yield self._sse_event("greeting_done", {
+                "greeting_text": greeting.strip(),
             })
 
         except Exception as e:
@@ -197,7 +173,7 @@ class SessionService:
     ) -> AsyncGenerator[str, None]:
         """
         종료 전 마지막 오픈에드 질문을 SSE 스트리밍으로 제공.
-        
+
         이벤트 순서:
         1. start: 처리 시작
         2. continue (반복): 토큰 스트리밍
@@ -247,7 +223,7 @@ class SessionService:
     ) -> AsyncGenerator[str, None]:
         """
         인터뷰 종료 시 마무리 멘트를 SSE 스트리밍으로 제공.
-        
+
         이벤트 순서:
         1. start: 처리 시작
         2. continue (반복): 토큰 스트리밍
