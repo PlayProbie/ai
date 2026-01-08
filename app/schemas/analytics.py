@@ -63,8 +63,8 @@ class ClusterInfo(BaseModel):
     keywords: list[str] = Field(
         default=[], description="c-TF-IDF 추출 키워드 (최대 5개)"
     )
-    representative_answer_ids: list[str] = Field(
-        default=[], description="MMR로 선정된 대표 답변 ID 리스트 (최대 5개)"
+    representative_answers: list[str] = Field(
+        default=[], description="MMR로 선정된 대표 답변 텍스트 리스트 (최대 5개)"
     )
 
 
@@ -74,6 +74,9 @@ class OutlierInfo(BaseModel):
     count: int = Field(..., description="이상치 답변 수")
     summary: str = Field(..., description="이상치 답변 요약")
     answer_ids: list[str] = Field(..., description="이상치 답변 ID 리스트")
+    sample_answers: list[str] = Field(
+        default=[], description="대표 이상치 답변 텍스트 리스트"
+    )
 
 
 class SentimentDistribution(BaseModel):
