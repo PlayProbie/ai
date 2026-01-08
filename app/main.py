@@ -12,6 +12,7 @@ from app.services.analytics_service import AnalyticsService
 from app.services.bedrock_service import BedrockService
 from app.services.embedding_service import EmbeddingService
 from app.services.interaction_service import InteractionService
+from app.services.session_service import SessionService
 
 # 로깅 설정 - uvicorn과 함께 동작하도록
 logging.basicConfig(
@@ -39,6 +40,8 @@ async def lifespan(app: FastAPI):
     app.state.bedrock_service = BedrockService()
     app.state.embedding_service = EmbeddingService()
     app.state.interaction_service = InteractionService(app.state.bedrock_service)
+    app.state.session_service = SessionService(app.state.bedrock_service)
+    logger.info(f"🔥 {settings.PROJECT_NAME} is starting up...")
     app.state.analytics_service = AnalyticsService(
         app.state.embedding_service, app.state.bedrock_service
     )
