@@ -64,12 +64,16 @@ class BedrockService:
             structured_llm = self.chat_model.with_structured_output(FixedQuestionDraft)
             chain = prompt | structured_llm
 
+            theme_info = self._format_theme_info(
+                request.theme_priorities, request.theme_details
+            )
+
             return await chain.ainvoke(
                 {
                     "game_name": request.game_name,
                     "game_genre": request.game_genre,
                     "game_context": request.game_context,
-                    "test_purpose": request.test_purpose,
+                    "theme_info": theme_info,
                 }
             )
 
@@ -90,12 +94,16 @@ class BedrockService:
             )
             chain = prompt | structured_llm
 
+            theme_info = self._format_theme_info(
+                request.theme_priorities, request.theme_details
+            )
+
             return await chain.ainvoke(
                 {
                     "game_name": request.game_name,
                     "game_genre": request.game_genre,
                     "game_context": request.game_context,
-                    "test_purpose": request.test_purpose,
+                    "theme_info": theme_info,
                     "original_question": request.original_question,
                 }
             )
@@ -134,9 +142,6 @@ class BedrockService:
                     "game_context": game_info.get("game_context")
                     if game_info
                     else "No context",
-                    "test_purpose": game_info.get("test_purpose")
-                    if game_info
-                    else "General feedback",
                     "conversation_history": self._format_history(conversation_history),
                 }
             )
@@ -170,9 +175,6 @@ class BedrockService:
                     "game_context": game_info.get("game_context")
                     if game_info
                     else "No context",
-                    "test_purpose": game_info.get("test_purpose")
-                    if game_info
-                    else "General feedback",
                     "conversation_history": self._format_history(conversation_history),
                 }
             )
@@ -195,6 +197,20 @@ class BedrockService:
             formatted.append(f"{i}. Q: {entry.get('question', 'N/A')}")
             formatted.append(f"   A: {entry.get('answer', 'N/A')}")
 
+        return "\n".join(formatted)
+
+    def _format_theme_info(
+        self, theme_priorities: list[str], theme_details: dict[str, list[str]] | None
+    ) -> str:
+        """대주제 우선순위와 세부 키워드를 프롬프트용 문자열로 변환."""
+        formatted = []
+        details_dict = theme_details or {}
+        for i, theme in enumerate(theme_priorities, 1):
+            details = ", ".join(details_dict.get(theme, []))
+            if details:
+                formatted.append(f"{i}순위. {theme}: [{details}]")
+            else:
+                formatted.append(f"{i}순위. {theme}")
         return "\n".join(formatted)
 
     # ============================================================
@@ -227,9 +243,6 @@ class BedrockService:
                     "game_context": game_info.get("game_context")
                     if game_info
                     else "No context",
-                    "test_purpose": game_info.get("test_purpose")
-                    if game_info
-                    else "General feedback",
                     "conversation_history": self._format_history(conversation_history),
                 }
             )
@@ -263,9 +276,6 @@ class BedrockService:
                     "game_context": game_info.get("game_context")
                     if game_info
                     else "No context",
-                    "test_purpose": game_info.get("test_purpose")
-                    if game_info
-                    else "General feedback",
                     "conversation_history": self._format_history(conversation_history),
                 }
             )
@@ -298,9 +308,6 @@ class BedrockService:
                 "game_context": game_info.get("game_context")
                 if game_info
                 else "No context",
-                "test_purpose": game_info.get("test_purpose")
-                if game_info
-                else "General feedback",
                 "conversation_history": self._format_history(conversation_history),
             }
         ):

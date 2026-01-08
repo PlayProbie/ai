@@ -55,7 +55,7 @@ class TestFixedQuestionDraft:
             "game_name": "테스트 게임",
             "game_genre": "rpg",
             "game_context": "판타지 세계관의 RPG 게임입니다.",
-            "test_purpose": "gameplay-validation",
+            "theme_priorities": ["gameplay", "story"],
         }
 
         # When
@@ -73,7 +73,7 @@ class TestFixedQuestionDraft:
         request_data = {
             "game_genre": "rpg",
             "game_context": "판타지 세계관의 RPG 게임입니다.",
-            "test_purpose": "gameplay-validation",
+            "theme_priorities": ["gameplay"],
         }
 
         # When
@@ -93,7 +93,7 @@ class TestFixedQuestionFeedback:
             "game_name": "테스트 게임",
             "game_genre": "rpg",
             "game_context": "판타지 세계관의 RPG 게임입니다.",
-            "test_purpose": "gameplay-validation",
+            "theme_priorities": ["gameplay", "ui_ux"],
             "original_question": "기존 질문입니다.",
         }
 
