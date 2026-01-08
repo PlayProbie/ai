@@ -90,7 +90,7 @@ class ClosingQuestionRequest(BaseModel):
     )
 
     session_id: str = Field(..., description="세션 UUID")
-    end_reason: str = Field(..., description="종료 이유 (ALL_DONE, TIME_LIMIT, FATIGUE, COVERAGE)")
+    end_reason: EndReason = Field(..., description="종료 이유")
     game_info: dict[str, Any] | None = Field(None, description="게임 정보")
 
 
