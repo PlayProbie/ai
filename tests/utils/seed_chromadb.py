@@ -95,8 +95,8 @@ async def seed_chromadb():
 
         request = InteractionEmbeddingRequest(
             session_id=f"session_{i:03d}",
-            survey_id=f"survey_{random.randint(100, 999)}",
-            fixed_question_id=f"fq_{random.randint(10, 99)}",
+            survey_uuid="a1b2c3d4-e5f6-7890-abcd-ef1234567890",  # 테스트용 고정 UUID
+            fixed_question_id=1,  # 테스트용 고정 ID (int)
             qa_pairs=pairs,
             metadata={
                 "game_name": game,

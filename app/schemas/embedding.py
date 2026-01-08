@@ -34,8 +34,8 @@ class InteractionEmbeddingRequest(BaseModel):
     )
 
     session_id: str = Field(..., description="세션 ID")
-    survey_id: str = Field(..., description="설문 ID")
-    fixed_question_id: str = Field(..., description="고정 질문 ID")
+    survey_uuid: str = Field(..., description="설문 UUID (String)")
+    fixed_question_id: int = Field(..., description="고정 질문 ID (Long)")
     qa_pairs: list[QuestionAnswerPair] = Field(
         ...,
         min_length=1,

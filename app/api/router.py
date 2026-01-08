@@ -1,6 +1,8 @@
 from fastapi import APIRouter
 
-from app.api.endpoints import embedding, fixed_question, survey_interaction, survey_session
+
+from app.api.endpoints import analytics, embedding, fixed_question, survey_interaction, survey_session
+
 
 api_router = APIRouter()
 
@@ -18,3 +20,4 @@ api_router.include_router(
 
 api_router.include_router(embedding.router, prefix="/embeddings", tags=["embeddings"])
 
+api_router.include_router(analytics.router, prefix="/analytics", tags=["analytics"])
