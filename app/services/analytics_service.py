@@ -662,8 +662,8 @@ class AnalyticsService:
                         answer_ids=[ids[i] for i in metadata["indices"]],
                         satisfaction=sentiment.get("satisfaction", 50),
                         keywords=metadata["keywords"],
-                        representative_answer_ids=[
-                            ids[i] for i in metadata["rep_indices"]
+                        representative_answers=[
+                            documents[i] for i in metadata["rep_indices"]
                         ],
                     )
                 )
@@ -699,6 +699,7 @@ class AnalyticsService:
                     count=len(outlier_indices),
                     summary=outlier_summary,
                     answer_ids=[ids[i] for i in outlier_indices],
+                    sample_answers=outlier_docs,
                 )
             else:
                 meta_summary = await meta_task
