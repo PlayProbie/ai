@@ -178,7 +178,7 @@ class TestAnalyticsService:
             "embeddings": [],
         }
 
-        result = analytics_service._query_answers_from_chromadb("q1", "s1")
+        result = analytics_service._query_answers_from_chromadb("q1", "s1_uuid")
 
         assert result["ids"] == []
         mock_embedding_service.collection.get.assert_called_once()
@@ -190,11 +190,14 @@ class TestAnalyticsService:
         mock_embedding_service.collection.get.return_value = {
             "ids": ["doc1", "doc2"],
             "documents": ["답변1", "답변2"],
-            "metadatas": [{"session_id": "s1"}, {"session_id": "s2"}],
+            "metadatas": [
+                {"session_id": "s1", "survey_uuid": "s1_uuid"},
+                {"session_id": "s2", "survey_uuid": "s1_uuid"},
+            ],
             "embeddings": [[0.1, 0.2], [0.3, 0.4]],
         }
 
-        result = analytics_service._query_answers_from_chromadb("q1", "s1")
+        result = analytics_service._query_answers_from_chromadb("q1", "s1_uuid")
 
         assert len(result["embeddings"]) == 2
         call_args = mock_embedding_service.collection.get.call_args
@@ -372,9 +375,9 @@ class TestQuestionAnalysisRequest:
     def test_request_creation(self):
         """요청 스키마 생성 테스트"""
         request = QuestionAnalysisRequest(
-            survey_id="1",
-            fixed_question_id="q1",
+            survey_uuid="1",
+            fixed_question_id=1,
         )
 
-        assert request.survey_id == "1"
-        assert request.fixed_question_id == "q1"
+        assert request.survey_uuid == "1"
+        assert request.fixed_question_id == 1

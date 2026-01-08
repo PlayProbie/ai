@@ -106,7 +106,7 @@ class EmbeddingService:
         # 4. 메타데이터 구성
         metadata = {
             "session_id": request.session_id,
-            "survey_id": request.survey_id,
+            "survey_uuid": request.survey_uuid,
             "fixed_question_id": request.fixed_question_id,
             "qa_count": len(request.qa_pairs),
         }

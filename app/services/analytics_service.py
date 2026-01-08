@@ -71,7 +71,7 @@ class AnalyticsService:
     # =========================================================================
 
     def _query_answers_from_chromadb(
-        self, fixed_question_id: int, survey_id: int
+        self, fixed_question_id: int, survey_uuid: str
     ) -> dict:
         """ChromaDB에서 특정 질문에 대한 답변들 + 임베딩 조회"""
         try:
@@ -85,20 +85,20 @@ class AnalyticsService:
 
             if not results["ids"]:
                 logger.warning(
-                    f"⚠️ 답변 없음: question_id={fixed_question_id}, survey_id={survey_id}"
+                    f"⚠️ 답변 없음: question_id={fixed_question_id}, survey_uuid={survey_uuid}"
                 )
                 return {"ids": [], "documents": [], "metadatas": [], "embeddings": []}
 
-            # survey_id로 추가 필터링 (Python에서 처리)
+            # survey_uuid로 추가 필터링 (Python에서 처리)
             filtered_indices = [
                 i
                 for i, meta in enumerate(results["metadatas"])
-                if meta.get("survey_id") == survey_id
+                if meta.get("survey_uuid") == survey_uuid
             ]
 
             if not filtered_indices:
                 logger.warning(
-                    f"⚠️ survey_id 필터 후 답변 없음: question_id={fixed_question_id}, survey_id={survey_id}"
+                    f"⚠️ survey_uuid 필터 후 답변 없음: question_id={fixed_question_id}, survey_uuid={survey_uuid}"
                 )
                 return {"ids": [], "documents": [], "metadatas": [], "embeddings": []}
 
@@ -538,7 +538,7 @@ class AnalyticsService:
         """분석 결과를 SSE 스트리밍으로 반환"""
         try:
             logger.info(
-                f"🔍 분석 시작: Question {question_id}, Survey {request.survey_id}, FixedQuestion {request.fixed_question_id}"
+                f"🔍 분석 시작: Question {question_id}, Survey {request.survey_uuid}, FixedQuestion {request.fixed_question_id}"
             )
 
             # Step 1: Progress - Loading
@@ -546,7 +546,7 @@ class AnalyticsService:
 
             # Step 2: ChromaDB 조회
             results = self._query_answers_from_chromadb(
-                request.fixed_question_id, request.survey_id
+                request.fixed_question_id, request.survey_uuid
             )
             total_count = len(results["ids"])
 

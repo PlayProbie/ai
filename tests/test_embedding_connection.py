@@ -40,7 +40,7 @@ def test_embedding_connection():
         print("3️⃣ Chroma 저장 테스트...")
         request = InteractionEmbeddingRequest(
             session_id="test-session",
-            survey_id="test-survey",
+            survey_uuid="test-uuid",
             fixed_question_id="test-fq-001",
             qa_pairs=[
                 QuestionAnswerPair(
