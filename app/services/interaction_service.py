@@ -83,7 +83,7 @@ class InteractionService:
     ) -> AsyncGenerator[str, None]:
         """
         SSE 스트리밍으로 답변 분석 및 꼬리질문 생성.
-        
+
         이벤트 순서:
         1. start: 처리 시작
         2. analyze_answer: 답변 분석 결과 (action, analysis, should_end)
@@ -106,9 +106,22 @@ class InteractionService:
                 conversation_history=request.conversation_history,
             )
 
-            # 피로도가 높으면 AI 판단과 별개로 종료 권장
-            should_end = fatigue_check["fatigued"]
-            end_reason = EndReason.FATIGUE.value if should_end else None
+            # 마지막 질문 판단 (Option A)
+            is_last_question = False
+            if request.current_question_order and request.total_questions:
+                is_last_question = request.current_question_order >= request.total_questions
+
+            # 종료 조건 판단
+            should_end = False
+            end_reason = None
+
+            if fatigue_check["fatigued"]:
+                should_end = True
+                end_reason = EndReason.FATIGUE.value
+            elif is_last_question and analyze_result["action"] == SurveyAction.PASS_TO_NEXT.value:
+                # 마지막 질문이고, AI가 PASS_TO_NEXT 판단 → 종료
+                should_end = True
+                end_reason = EndReason.ALL_DONE.value
 
             yield self._sse_event("analyze_answer", {
                 "action": analyze_result["action"],
@@ -159,7 +172,7 @@ class InteractionService:
     def _check_fatigue(self, request: SurveyInteractionRequest) -> dict:
         """
         테스터 피로도를 휴리스틱으로 체크.
-        
+
         기준:
         - 답변이 3단어 이하
         - 연속으로 3회 짧은 답변 (대화 기록에서 확인)
@@ -168,7 +181,7 @@ class InteractionService:
             """3단어 이하인지 체크"""
             words = text.strip().split()
             return len(words) <= MAX_WORDS_FOR_FATIGUE
-        
+
         current_answer_short = is_short_answer(request.user_answer)
 
         # 대화 기록에서 연속 짧은 답변 체크

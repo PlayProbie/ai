@@ -116,6 +116,10 @@ class SurveyInteractionRequest(BaseModel):
         None, description="세션 경과 시간 (초) - 시간 만료 체크용"
     )
 
+    # 마지막 질문 판단용 (Option A)
+    current_question_order: int | None = Field(None, description="현재 질문 순서 (1부터 시작)")
+    total_questions: int | None = Field(None, description="전체 고정 질문 개수")
+
     # 선택적 메타데이터
     game_info: dict[str, Any] | None = Field(None, description="게임 정보")
     conversation_history: list[dict[str, str]] | None = Field(
