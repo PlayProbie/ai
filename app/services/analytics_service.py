@@ -28,6 +28,7 @@ from app.core.analytics_prompts import (
     SENTIMENT_ANALYSIS_PROMPT,
 )
 from app.core.exceptions import AIGenerationException
+from app.core.retry_policy import bedrock_retry
 from app.schemas.analytics import (
     ClusterInfo,
     EmotionType,
@@ -64,7 +65,7 @@ class AnalyticsService:
 
         # 동시성 제어 (Bedrock Throttling 방지)
         # 동시에 최대 5개의 LLM 분석 작업만 수행
-        self.concurrency_limit = asyncio.Semaphore(5)
+        self.concurrency_limit = asyncio.Semaphore(2)
 
     # =========================================================================
     # Step 1: Data Loading
@@ -321,10 +322,10 @@ class AnalyticsService:
     # Step 6: LLM Sentiment Analysis
     # =========================================================================
 
+    @bedrock_retry
     async def _analyze_sentiment_with_llm(self, documents: list[str]) -> dict:
         """LLM으로 클러스터 감정 분석"""
-
-        async def _call_llm():
+        try:
             prompt = ChatPromptTemplate.from_messages(
                 [
                     ("system", CLUSTER_ANALYSIS_SYSTEM_PROMPT),
@@ -338,9 +339,6 @@ class AnalyticsService:
                 response = await chain.ainvoke({"answers": docs_text})
 
             return self._parse_llm_json(response.content)
-
-        try:
-            return await self._retry_llm_call(_call_llm)
 
         except Exception as error:
             logger.error(f"❌ 감정 분석 실패: {error}")
@@ -363,12 +361,13 @@ class AnalyticsService:
     # Step 7: Outlier Analysis
     # =========================================================================
 
+    @bedrock_retry
     async def _analyze_outliers_with_llm(self, documents: list[str]) -> str:
         """LLM으로 이상치 답변 분석"""
         if not documents:
             return "이상치 없음"
 
-        async def _call_llm():
+        try:
             prompt = ChatPromptTemplate.from_messages(
                 [
                     ("system", CLUSTER_ANALYSIS_SYSTEM_PROMPT),
@@ -384,9 +383,6 @@ class AnalyticsService:
             result = self._parse_llm_json(response.content)
             return result.get("summary", "분석 불가")
 
-        try:
-            return await self._retry_llm_call(_call_llm)
-
         except Exception as error:
             logger.error(f"❌ 이상치 분석 실패: {error}")
             return "분석 실패"
@@ -395,12 +391,13 @@ class AnalyticsService:
     # Step 8: Map-Reduce Meta Summary
     # =========================================================================
 
+    @bedrock_retry
     async def _generate_meta_summary(self, cluster_summaries: list[str]) -> str:
         """Map-Reduce: 클러스터 요약들을 종합하여 메타 요약 생성"""
         if not cluster_summaries:
             return ""
 
-        async def _call_llm():
+        try:
             prompt = ChatPromptTemplate.from_messages(
                 [
                     ("system", CLUSTER_ANALYSIS_SYSTEM_PROMPT),
@@ -416,34 +413,9 @@ class AnalyticsService:
             result = self._parse_llm_json(response.content)
             return result.get("meta_summary", "")
 
-        try:
-            return await self._retry_llm_call(_call_llm)
-
         except Exception as error:
             logger.error(f"❌ 메타 요약 생성 실패: {error}")
             return ""
-
-    # =========================================================================
-    # Helper Methods
-    # =========================================================================
-
-    async def _retry_llm_call(self, llm_func, *args, max_retries=3, **kwargs):
-        """LLM 호출 재시도 로직 (exponential backoff)"""
-        for attempt in range(1, max_retries + 1):
-            try:
-                return await llm_func(*args, **kwargs)
-            except Exception as error:
-                if attempt == max_retries:
-                    logger.error(
-                        f"❌ LLM 호출 최종 실패 ({max_retries}회 시도): {error}"
-                    )
-                    raise
-                wait_time = 2 ** (attempt - 1)  # 1초, 2초, 4초
-                logger.warning(
-                    f"⚠️ LLM 호출 실패 ({attempt}/{max_retries} 시도), "
-                    f"{wait_time}초 후 재시도... 오류: {error}"
-                )
-                await asyncio.sleep(wait_time)
 
     def _parse_llm_json(self, content) -> dict:
         """LLM 응답에서 JSON 파싱"""

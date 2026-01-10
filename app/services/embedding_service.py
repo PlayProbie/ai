@@ -8,7 +8,8 @@ import chromadb
 from langchain_aws import BedrockEmbeddings
 
 from app.core.config import settings
-from app.core.exceptions import AIGenerationException
+from app.core.exceptions import AIGenerationException, AIModelNotAvailableException
+from app.core.retry_policy import bedrock_retry
 from app.schemas.embedding import InteractionEmbeddingRequest
 
 logger = logging.getLogger(__name__)
@@ -33,7 +34,7 @@ class EmbeddingService:
             )
         except Exception as error:
             logger.error(f"❌ Bedrock Embeddings 초기화 실패: {error}")
-            raise AIGenerationException(
+            raise AIModelNotAvailableException(
                 f"Bedrock Embeddings 초기화 실패: {error}"
             ) from error
 
@@ -50,8 +51,11 @@ class EmbeddingService:
             logger.info(f"✅ ChromaDB 로드 완료: {settings.CHROMA_PERSIST_DIR}")
         except Exception as error:
             logger.error(f"❌ ChromaDB 연결 실패: {error}")
-            raise AIGenerationException(f"ChromaDB 연결 실패: {error}") from error
+            raise AIModelNotAvailableException(
+                f"ChromaDB 연결 실패: {error}"
+            ) from error
 
+    @bedrock_retry
     def embed_text(self, text: str) -> list[float]:
         """Amazon Titan Text Embeddings V2로 텍스트 임베딩
 
