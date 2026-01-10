@@ -130,7 +130,13 @@ class InteractionService:
                 "end_reason": end_reason,
             })
 
-            # Step 2: 꼬리 질문 필요 시 토큰 스트리밍
+            # Step 2: 리액션 생성 및 전송 (DB 저장 X, UI 표시용)
+            reaction_text = await self.bedrock_service.generate_reaction_async(
+                user_answer=request.user_answer
+            )
+            yield self._sse_event("reaction", {"reaction_text": reaction_text})
+
+            # Step 3: 꼬리 질문 필요 시 토큰 스트리밍
             action = analyze_result["action"]
             full_message = ""
 

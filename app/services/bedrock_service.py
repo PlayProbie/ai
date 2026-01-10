@@ -8,6 +8,7 @@ from app.core.config import settings
 from app.core.exceptions import AIGenerationException, AIModelNotAvailableException
 from app.core.prompts import (
     ANALYZE_ANSWER_PROMPT,
+    GENERATE_REACTION_PROMPT,
     GENERATE_TAIL_QUESTION_PROMPT,
     QUESTION_FEEDBACK_SYSTEM_PROMPT,
     QUESTION_GENERATION_SYSTEM_PROMPT,
@@ -287,6 +288,20 @@ class BedrockService:
             raise AIGenerationException(
                 f"꼬리 질문 생성 중 오류 발생: {error}"
             ) from error
+
+    async def generate_reaction_async(self, user_answer: str) -> str:
+        """사용자 답변에 대한 간단한 리액션 생성 (DB 저장 X, UI 표시용)."""
+        try:
+            prompt = ChatPromptTemplate.from_template(GENERATE_REACTION_PROMPT)
+            chain = prompt | self.chat_model
+
+            response = await chain.ainvoke({"user_answer": user_answer})
+            return response.content.strip()
+
+        except Exception as error:
+            logger.error(f"❌ 리액션 생성 실패: {error}")
+            # 리액션 실패 시 기본 메시지 반환 (에러 throw 안 함)
+            return "답변 감사합니다! 🙏"
 
     async def stream_tail_question(
         self,
