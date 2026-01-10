@@ -134,44 +134,30 @@ class SessionService:
         인터뷰 시작 시 인사말만 SSE 스트리밍으로 제공.
         첫번째 고정질문은 Spring이 DB에서 조회하여 전송.
 
-        인터뷰 시작 시 인사말만 SSE 스트리밍으로 제공.
-        첫번째 고정질문은 Spring이 DB에서 조회하여 전송.
-
         이벤트 순서:
         1. start: 처리 시작
         2. greeting_continue (반복): 인사말 토큰 스트리밍
         3. greeting_done: 인사말 완료
-        2. greeting_continue (반복): 인사말 토큰 스트리밍
-        3. greeting_done: 인사말 완료
         """
         try:
-            yield self._sse_event("start", {"status": "processing"})
             yield self._sse_event("start", {"status": "processing"})
 
             game_info = request.game_info or {}
             game_name = game_info.get("name", "게임")
 
             greeting = ""
-            greeting = ""
 
-            # 인사말 생성 및 스트리밍
             # 인사말 생성 및 스트리밍
             async for token in self._stream_prompt(
                 GREETING_PROMPT,
                 {"game_name": game_name},
-                {"game_name": game_name},
             ):
-                greeting += token
-                yield self._sse_event("greeting_continue", {"content": token})
                 greeting += token
                 yield self._sse_event("greeting_continue", {"content": token})
 
             # 인사말 완료 - 첫번째 질문은 Spring이 DB에서 조회하여 전송
             yield self._sse_event("greeting_done", {
-                "greeting_text": greeting.strip(),
-            # 인사말 완료 - 첫번째 질문은 Spring이 DB에서 조회하여 전송
-            yield self._sse_event("greeting_done", {
-                "greeting_text": greeting.strip(),
+                "greeting_text": greeting.strip()
             })
 
         except Exception as e:
