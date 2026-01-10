@@ -87,44 +87,91 @@ class InteractionService:
         이벤트 순서:
         1. start: 처리 시작
         2. analyze_answer: 답변 분석 결과 (action, analysis, should_end)
-        3. continue (반복): 꼬리질문 토큰 스트리밍 (TAIL_QUESTION인 경우)
-        4. generate_tail_complete: 꼬리질문 생성 완료 (TAIL_QUESTION인 경우)
-        5. done: 처리 완료
+        3. reaction: 리액션 (DB 저장 X)
+        4. continue (반복): 꼬리질문 토큰 스트리밍 (TAIL_QUESTION인 경우)
+        5. generate_tail_complete: 꼬리질문 생성 완료 (TAIL_QUESTION인 경우)
+        6. done: 처리 완료
         """
         try:
             yield self._sse_event("start", {"status": "processing", "phase": "main"})
 
-            # 피로도 체크 (간단한 휴리스틱)
-            fatigue_check = self._check_fatigue(request)
+            # =====================================================
+            # 규칙 기반 PASS_TO_NEXT 판단 (AI 호출 전 선행 체크)
+            # =====================================================
 
-            # Step 1: 답변 분석
-            analyze_result = await self.bedrock_service.analyze_answer_async(
-                current_question=request.current_question,
-                user_answer=request.user_answer,
-                tail_question_count=request.probe_count,
-                game_info=request.game_info,
-                conversation_history=request.conversation_history,
-            )
+            # 꼬리질문 횟수 (신규 필드 우선, 없으면 기존 probe_count 사용)
+            max_tails = request.max_tail_questions if request.max_tail_questions is not None else 3
+            current_tails = request.current_tail_count if request.current_tail_count is not None else request.probe_count
 
-            # 마지막 질문 판단 (Option A)
+            # 마지막 질문 판단
             is_last_question = False
             if request.current_question_order and request.total_questions:
                 is_last_question = request.current_question_order >= request.total_questions
 
+            # 짧은 답변 감지
+            SHORT_ANSWERS = {"응", "어", "아니", "없어", "그냥", "몰라", "네", "아뇨", "ㅇㅇ", "ㄴㄴ", "몰름", "글쎄", "좋아", "별로"}
+            STOP_PHRASES = {"그만", "다음", "넘어가", "스킵", "다른 질문", "넘어갈게", "패스"}
+
+            answer_stripped = request.user_answer.strip()
+            is_short_answer = answer_stripped in SHORT_ANSWERS or len(answer_stripped) <= 5
+            wants_skip = any(phrase in request.user_answer for phrase in STOP_PHRASES)
+
+            # 규칙 기반 강제 PASS 판단
+            force_pass = False
+            force_pass_reason = ""
+
+            if current_tails >= max_tails:
+                force_pass = True
+                force_pass_reason = f"꼬리질문 횟수 제한({max_tails}회) 도달"
+                logger.info(f"🛑 Tail limit reached: {current_tails}/{max_tails}")
+            elif is_short_answer and current_tails >= 1:
+                force_pass = True
+                force_pass_reason = "꼬리질문 후에도 짧은 답변 지속"
+                logger.info(f"🛑 Short answer after tail question: '{answer_stripped}'")
+            elif wants_skip:
+                force_pass = True
+                force_pass_reason = "사용자가 다음 질문 요청"
+                logger.info(f"🛑 User requested skip: '{request.user_answer}'")
+
+            # =====================================================
+            # AI 답변 분석 (force_pass가 아닌 경우만)
+            # =====================================================
+
+            if force_pass:
+                # AI 호출 생략, 규칙 기반 결과 사용
+                analyze_result = {
+                    "action": SurveyAction.PASS_TO_NEXT.value,
+                    "analysis": force_pass_reason,
+                }
+            else:
+                # 피로도 체크 (간단한 휴리스틱)
+                fatigue_check = self._check_fatigue(request)
+
+                # AI 답변 분석
+                analyze_result = await self.bedrock_service.analyze_answer_async(
+                    current_question=request.current_question,
+                    user_answer=request.user_answer,
+                    tail_question_count=current_tails,
+                    game_info=request.game_info,
+                    conversation_history=request.conversation_history,
+                )
+
+                # 피로도 감지 시 강제 PASS
+                if fatigue_check["fatigued"]:
+                    analyze_result["action"] = SurveyAction.PASS_TO_NEXT.value
+                    analyze_result["analysis"] = "피로도 감지로 다음 질문으로 이동"
+
             # 종료 조건 판단
+            action = analyze_result["action"]
             should_end = False
             end_reason = None
 
-            if fatigue_check["fatigued"]:
-                should_end = True
-                end_reason = EndReason.FATIGUE.value
-            elif is_last_question and analyze_result["action"] == SurveyAction.PASS_TO_NEXT.value:
-                # 마지막 질문이고, AI가 PASS_TO_NEXT 판단 → 종료
+            if is_last_question and action == SurveyAction.PASS_TO_NEXT.value:
                 should_end = True
                 end_reason = EndReason.ALL_DONE.value
 
             yield self._sse_event("analyze_answer", {
-                "action": analyze_result["action"],
+                "action": action,
                 "analysis": analyze_result["analysis"],
                 "should_end": should_end,
                 "end_reason": end_reason,
@@ -137,7 +184,6 @@ class InteractionService:
             yield self._sse_event("reaction", {"reaction_text": reaction_text})
 
             # Step 3: 꼬리 질문 필요 시 토큰 스트리밍
-            action = analyze_result["action"]
             full_message = ""
 
             if action == SurveyAction.TAIL_QUESTION.value and not should_end:
@@ -148,13 +194,12 @@ class InteractionService:
                     conversation_history=request.conversation_history,
                 ):
                     full_message += token
-                    # token → continue 이벤트로 변경
                     yield self._sse_event("continue", {"content": token})
 
                 # 꼬리질문 생성 완료
                 yield self._sse_event("generate_tail_complete", {
                     "message": full_message,
-                    "tail_question_count": request.probe_count + 1,
+                    "tail_question_count": current_tails + 1,
                 })
 
             # 완료 이벤트 (phase, should_end 포함)

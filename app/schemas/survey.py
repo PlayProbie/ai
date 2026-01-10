@@ -111,7 +111,7 @@ class SurveyInteractionRequest(BaseModel):
     question_type: QuestionType = Field(
         QuestionType.FIXED, description="질문 유형 (FIXED, TAIL)"
     )
-    probe_count: int = Field(0, description="현재까지 꼬리질문 횟수")
+    probe_count: int = Field(0, description="현재까지 꼬리질문 횟수 (하위 호환)")
     session_elapsed_seconds: int | None = Field(
         None, description="세션 경과 시간 (초) - 시간 만료 체크용"
     )
@@ -119,6 +119,12 @@ class SurveyInteractionRequest(BaseModel):
     # 마지막 질문 판단용 (Option A)
     current_question_order: int | None = Field(None, description="현재 질문 순서 (1부터 시작)")
     total_questions: int | None = Field(None, description="전체 고정 질문 개수")
+
+    # ===== 신규 필드 (Spring에서 추가 전송) =====
+    fixed_q_id: int | None = Field(None, description="현재 고정질문 ID")
+    turn_num: int | None = Field(1, description="현재 턴 번호 (1=고정질문, 2+=꼬리질문)")
+    current_tail_count: int | None = Field(0, description="현재까지 진행된 꼬리질문 횟수")
+    max_tail_questions: int | None = Field(3, description="최대 허용 꼬리질문 횟수")
 
     # 선택적 메타데이터
     game_info: dict[str, Any] | None = Field(None, description="게임 정보")
