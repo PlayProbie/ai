@@ -13,6 +13,7 @@ from app.core.prompts import (
     QUESTION_FEEDBACK_SYSTEM_PROMPT,
     QUESTION_GENERATION_SYSTEM_PROMPT,
 )
+from app.core.retry_policy import bedrock_retry
 from app.schemas.fixed_question import (
     FixedQuestionDraft,
     FixedQuestionDraftCreate,
@@ -47,6 +48,7 @@ class BedrockService:
                 f"Bedrock 모델 초기화 실패: {error}"
             ) from error
 
+    @bedrock_retry
     def invoke(self, prompt: str) -> str:
         """단순 프롬프트 호출 (연결 테스트용)"""
         try:
@@ -56,6 +58,7 @@ class BedrockService:
             logger.error(f"❌ Bedrock API 에러: {type(error).__name__}: {error}")
             raise AIGenerationException(f"Bedrock API 호출 실패: {error}") from error
 
+    @bedrock_retry
     async def generate_fixed_questions(
         self, request: FixedQuestionDraftCreate
     ) -> FixedQuestionDraft:
@@ -84,6 +87,7 @@ class BedrockService:
             logger.error(f"❌ 질문 생성 실패: {error}")
             raise AIGenerationException(f"질문 생성 중 오류 발생: {error}") from error
 
+    @bedrock_retry
     async def generate_feedback_questions(
         self, request: FixedQuestionFeedbackCreate
     ) -> FixedQuestionFeedback:
@@ -117,77 +121,6 @@ class BedrockService:
                 f"질문 피드백 생성 중 오류 발생: {error}"
             ) from error
 
-    def analyze_answer(
-        self,
-        current_question: str,
-        user_answer: str,
-        tail_question_count: int,
-        game_info: dict | None = None,
-        conversation_history: list[dict] | None = None,
-    ) -> dict:
-        """답변 분석 후 TAIL_QUESTION 또는 PASS_TO_NEXT 결정."""
-        try:
-            prompt = ChatPromptTemplate.from_template(ANALYZE_ANSWER_PROMPT)
-            structured_llm = self.chat_model.with_structured_output(AnswerAnalysis)
-            chain = prompt | structured_llm
-
-            result: AnswerAnalysis = chain.invoke(
-                {
-                    "current_question": current_question,
-                    "user_answer": user_answer,
-                    "tail_question_count": tail_question_count,
-                    "game_name": game_info.get("game_name") if game_info else "Unknown",
-                    "game_genre": game_info.get("game_genre")
-                    if game_info
-                    else "Unknown",
-                    "game_context": game_info.get("game_context")
-                    if game_info
-                    else "No context",
-                    "conversation_history": self._format_history(conversation_history),
-                }
-            )
-
-            return {"action": result.action.value, "analysis": result.analysis}
-
-        except Exception as error:
-            logger.error(f"❌ 답변 분석 실패: {error}")
-            raise AIGenerationException(f"답변 분석 중 오류 발생: {error}") from error
-
-    def generate_tail_question(
-        self,
-        current_question: str,
-        user_answer: str,
-        game_info: dict | None = None,
-        conversation_history: list[dict] | None = None,
-    ) -> str:
-        """꼬리 질문 생성."""
-        try:
-            prompt = ChatPromptTemplate.from_template(GENERATE_TAIL_QUESTION_PROMPT)
-            chain = prompt | self.chat_model
-
-            response = chain.invoke(
-                {
-                    "current_question": current_question,
-                    "user_answer": user_answer,
-                    "game_name": game_info.get("game_name") if game_info else "Unknown",
-                    "game_genre": game_info.get("game_genre")
-                    if game_info
-                    else "Unknown",
-                    "game_context": game_info.get("game_context")
-                    if game_info
-                    else "No context",
-                    "conversation_history": self._format_history(conversation_history),
-                }
-            )
-
-            return response.content
-
-        except Exception as error:
-            logger.error(f"❌ 꼬리 질문 생성 실패: {error}")
-            raise AIGenerationException(
-                f"꼬리 질문 생성 중 오류 발생: {error}"
-            ) from error
-
     def _format_history(self, history: list[dict] | None) -> str:
         """대화 기록을 LLM이 읽기 쉬운 포맷으로 변환."""
         if not history:
@@ -218,6 +151,7 @@ class BedrockService:
     # Async Methods for SSE Streaming
     # ============================================================
 
+    @bedrock_retry
     async def analyze_answer_async(
         self,
         current_question: str,
@@ -254,6 +188,7 @@ class BedrockService:
             logger.error(f"❌ 답변 분석 실패 (async): {error}")
             raise AIGenerationException(f"답변 분석 중 오류 발생: {error}") from error
 
+    @bedrock_retry
     async def generate_tail_question_async(
         self,
         current_question: str,
@@ -311,29 +246,35 @@ class BedrockService:
         conversation_history: list[dict] | None = None,
     ):
         """꼬리 질문 토큰 스트리밍 (Gemini/Claude 스타일)."""
-        prompt = ChatPromptTemplate.from_template(GENERATE_TAIL_QUESTION_PROMPT)
-        chain = prompt | self.chat_model
+        try:
+            prompt = ChatPromptTemplate.from_template(GENERATE_TAIL_QUESTION_PROMPT)
+            chain = prompt | self.chat_model
 
-        async for chunk in chain.astream(
-            {
-                "current_question": current_question,
-                "user_answer": user_answer,
-                "game_name": game_info.get("game_name") if game_info else "Unknown",
-                "game_genre": game_info.get("game_genre") if game_info else "Unknown",
-                "game_context": game_info.get("game_context")
-                if game_info
-                else "No context",
-                "conversation_history": self._format_history(conversation_history),
-            }
-        ):
-            content = chunk.content
-            if content:
-                # Bedrock은 content를 리스트로 반환할 수 있음
-                if isinstance(content, list):
-                    for item in content:
-                        if isinstance(item, dict) and "text" in item:
-                            yield item["text"]
-                        elif isinstance(item, str):
-                            yield item
-                else:
-                    yield content
+            async for chunk in chain.astream(
+                {
+                    "current_question": current_question,
+                    "user_answer": user_answer,
+                    "game_name": game_info.get("game_name") if game_info else "Unknown",
+                    "game_genre": game_info.get("game_genre")
+                    if game_info
+                    else "Unknown",
+                    "game_context": game_info.get("game_context")
+                    if game_info
+                    else "No context",
+                    "conversation_history": self._format_history(conversation_history),
+                }
+            ):
+                content = chunk.content
+                if content:
+                    # Bedrock은 content를 리스트로 반환할 수 있음
+                    if isinstance(content, list):
+                        for item in content:
+                            if isinstance(item, dict) and "text" in item:
+                                yield item["text"]
+                            elif isinstance(item, str):
+                                yield item
+                    else:
+                        yield content
+        except Exception as error:
+            logger.error(f"❌ 스트리밍 중 오류: {error}")
+            raise AIGenerationException(f"스트리밍 중 오류 발생: {error}") from error
