@@ -64,7 +64,7 @@ class AnalyticsService:
         logger.info("✅ Kiwi 형태소 분석기 초기화 완료")
 
         # 동시성 제어 (Bedrock Throttling 방지)
-        # 동시에 최대 5개의 LLM 분석 작업만 수행
+        # 동시에 최대 2개의 LLM 분석 작업만 수행
         self.concurrency_limit = asyncio.Semaphore(2)
 
     # =========================================================================
