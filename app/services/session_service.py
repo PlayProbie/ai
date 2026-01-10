@@ -26,7 +26,7 @@ logger = logging.getLogger(__name__)
 # Prompts
 # =============================================================================
 
-GREETING_PROMPT = """게임 플레이테스트에 온 테스터에게 친근한 인사를 해주세요.
+GREETING_PROMPT = """게임 플레이테스트를 막 끝내고 설문조사를 하러 온 테스터에게 친근한 인사를 해주세요.
 게임 이름: {game_name}
 
 요구사항:
@@ -157,7 +157,7 @@ class SessionService:
 
             # 인사말 완료 - 첫번째 질문은 Spring이 DB에서 조회하여 전송
             yield self._sse_event("greeting_done", {
-                "greeting_text": greeting.strip(),
+                "greeting_text": greeting.strip()
             })
 
         except Exception as e:
@@ -173,6 +173,7 @@ class SessionService:
     ) -> AsyncGenerator[str, None]:
         """
         종료 전 마지막 오픈에드 질문을 SSE 스트리밍으로 제공.
+
 
         이벤트 순서:
         1. start: 처리 시작
@@ -223,6 +224,7 @@ class SessionService:
     ) -> AsyncGenerator[str, None]:
         """
         인터뷰 종료 시 마무리 멘트를 SSE 스트리밍으로 제공.
+
 
         이벤트 순서:
         1. start: 처리 시작
