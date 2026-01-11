@@ -38,7 +38,7 @@ class BedrockService:
                 model=settings.BEDROCK_MODEL_ID,
                 temperature=settings.TEMPERATURE,
                 max_tokens=settings.MAX_TOKENS,
-                region_name=settings.AWS_REGION,
+                region_name=settings.BEDROCK_REGION,
             )
         except Exception as error:
             logger.error(

@@ -17,6 +17,7 @@ class Settings(BaseSettings):
     # AWS Bedrock 설정 - 필수 (기본값 없음)
     AWS_BEDROCK_API_KEY: str
     AWS_REGION: str
+    BEDROCK_REGION: str
 
     # Bedrock 모델 설정 - 필수 (기본값 없음)
     BEDROCK_MODEL_ID: str
