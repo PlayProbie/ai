@@ -63,10 +63,6 @@ class AnalyticsService:
         self.kiwi = Kiwi()  # 한국어 형태소 분석기
         logger.info("✅ Kiwi 형태소 분석기 초기화 완료")
 
-        # 동시성 제어 (Bedrock Throttling 방지)
-        # 동시에 최대 2개의 LLM 분석 작업만 수행
-        self.concurrency_limit = asyncio.Semaphore(2)
-
     # =========================================================================
     # Step 1: Data Loading
     # =========================================================================
@@ -335,8 +331,7 @@ class AnalyticsService:
             chain = prompt | self.bedrock_service.chat_model
             docs_text = "\n".join([f"- {doc}" for doc in documents])
 
-            async with self.concurrency_limit:
-                response = await chain.ainvoke({"answers": docs_text})
+            response = await chain.ainvoke({"answers": docs_text})
 
             return self._parse_llm_json(response.content)
 
@@ -377,8 +372,7 @@ class AnalyticsService:
             chain = prompt | self.bedrock_service.chat_model
             docs_text = "\n".join([f"- {doc}" for doc in documents[:10]])
 
-            async with self.concurrency_limit:
-                response = await chain.ainvoke({"answers": docs_text})
+            response = await chain.ainvoke({"answers": docs_text})
 
             result = self._parse_llm_json(response.content)
             return result.get("summary", "분석 불가")
@@ -407,8 +401,7 @@ class AnalyticsService:
             chain = prompt | self.bedrock_service.chat_model
             summaries_text = "\n".join([f"- {s}" for s in cluster_summaries])
 
-            async with self.concurrency_limit:
-                response = await chain.ainvoke({"cluster_summaries": summaries_text})
+            response = await chain.ainvoke({"cluster_summaries": summaries_text})
 
             result = self._parse_llm_json(response.content)
             return result.get("meta_summary", "")
