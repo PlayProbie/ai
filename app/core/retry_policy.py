@@ -23,8 +23,8 @@ RETRYABLE_EXCEPTIONS = (
 # Bedrock API 호출용 재시도 decorator (동기/비동기 모두 지원)
 # Tenacity가 자동으로 sync/async 함수를 감지하여 처리
 bedrock_retry = retry(
-    stop=stop_after_attempt(3),  # 총 3회 시도 (최초 1회 + 재시도 2회)
-    wait=wait_exponential(multiplier=1, min=1, max=2),  # 1초 → 2초
+    stop=stop_after_attempt(4),  # 총 4회 시도 (최초 1회 + 재시도 3회)
+    wait=wait_exponential(multiplier=1, min=1, max=4),  # 1초 → 4초
     retry=retry_if_exception_type(RETRYABLE_EXCEPTIONS),
     before_sleep=before_sleep_log(logger, logging.WARNING),
 )
