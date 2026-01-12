@@ -12,6 +12,7 @@ class SurveyAction(str, Enum):
     """AI의 다음 행동 결정"""
     TAIL_QUESTION = "TAIL_QUESTION"
     PASS_TO_NEXT = "PASS_TO_NEXT"
+    RETRY_QUESTION = "RETRY_QUESTION"
 
 
 class InterviewPhase(str, Enum):
@@ -57,6 +58,28 @@ class ValidityResult(BaseModel):
     confidence: float = Field(..., ge=0.0, le=1.0, description="신뢰도")
     reason: str = Field(..., description="판단 근거")
     source: str = Field("rule", description="판단 출처 (rule/llm)")
+
+
+class QualityType(str, Enum):
+    """응답 품질 분류 (Thickness × Richness)"""
+    EMPTY = "EMPTY"         # LOW × LOW: 단답/평가만
+    GROUNDED = "GROUNDED"   # HIGH × LOW: 상황만 있음
+    FLOATING = "FLOATING"   # LOW × HIGH: 해석만 있음
+    FULL = "FULL"           # HIGH × HIGH: 완전함
+
+
+class QualityResult(BaseModel):
+    """품질 평가 결과"""
+    model_config = ConfigDict(
+        str_strip_whitespace=True,
+        populate_by_name=True,
+    )
+
+    thickness: str = Field(..., description="맥락적 상세함 (HIGH/LOW)")
+    thickness_evidence: list[str] = Field(default_factory=list, description="Thickness 충족 항목")
+    richness: str = Field(..., description="개념적 깊이 (HIGH/LOW)")
+    richness_evidence: list[str] = Field(default_factory=list, description="Richness 충족 항목")
+    quality: QualityType = Field(..., description="최종 품질 분류")
 
 
 # =============================================================================
@@ -147,7 +170,8 @@ class SurveyInteractionRequest(BaseModel):
     fixed_q_id: int | None = Field(None, description="현재 고정질문 ID")
     turn_num: int | None = Field(1, description="현재 턴 번호 (1=고정질문, 2+=꼬리질문)")
     current_tail_count: int | None = Field(0, description="현재까지 진행된 꼬리질문 횟수")
-    max_tail_questions: int | None = Field(3, description="최대 허용 꼬리질문 횟수")
+    max_tail_questions: int | None = Field(2, description="최대 허용 꼬리질문 횟수")
+    retry_count: int | None = Field(0, description="현재 질문에 대한 재시도 횟수")
 
     # 선택적 메타데이터
     game_info: dict[str, Any] | None = Field(None, description="게임 정보")

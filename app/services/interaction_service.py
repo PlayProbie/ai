@@ -91,27 +91,41 @@ class InteractionService:
                     "end_reason": routing_result.get("end_reason"),
                 })
 
-                # 리액션
-                reaction_text = await self.bedrock_service.generate_reaction_async(
-                    user_answer=request.user_answer
-                )
-                yield self._sse_event("reaction", {"reaction_text": reaction_text})
+                # RETRY_QUESTION 처리 (SSE 이벤트 분리)
+                if routing_result.get("action") == SurveyAction.RETRY_QUESTION.value:
+                    # 리액션
+                    reaction_text = await self.bedrock_service.generate_reaction_async(
+                        user_answer=request.user_answer
+                    )
+                    yield self._sse_event("reaction", {"reaction_text": reaction_text})
 
-                # 재질문/명확화 질문이 있으면 스트리밍
-                if routing_result.get("followup_message"):
-                    for char in routing_result["followup_message"]:
-                        yield self._sse_event("continue", {"content": char})
+                    # 재질문/명확화 질문 스트리밍
+                    if routing_result.get("followup_message"):
+                        for char in routing_result["followup_message"]:
+                            yield self._sse_event("continue", {"content": char})
 
-                    yield self._sse_event("generate_tail_complete", {
-                        "message": routing_result["followup_message"],
-                        "followup_type": routing_result.get("followup_type", "redirect"),
+                        # retry_request 이벤트 전송
+                        yield self._sse_event("retry_request", {
+                            "message": routing_result["followup_message"],
+                            "followup_type": routing_result.get("followup_type", "rephrase"),
+                        })
+
+                    yield self._sse_event("done", {
+                        "status": "completed",
+                        "action": SurveyAction.RETRY_QUESTION.value,
+                        "phase": InterviewPhase.MAIN.value,
+                        "question_text": routing_result.get("followup_message"),
+                        "should_end": False,
+                        "validity": validity_result.validity.value,
                     })
+                    return
 
+                # 그 외 Handled Case (PASS_TO_NEXT - REFUSAL, Max Retry 등)
                 yield self._sse_event("done", {
                     "status": "completed",
                     "action": routing_result["action"],
                     "phase": InterviewPhase.MAIN.value,
-                    "question_text": routing_result.get("followup_message"),
+                    "question_text": None,
                     "should_end": routing_result.get("should_end", False),
                     "end_reason": routing_result.get("end_reason"),
                     "validity": validity_result.validity.value,
@@ -249,10 +263,13 @@ class InteractionService:
 
         # UNINTELLIGIBLE: 재입력 요청
         if validity_type == ValidityType.UNINTELLIGIBLE:
+            if self._check_max_retries(request):
+                return self._force_pass_result(request, "질문 재시도 횟수 초과 (UNINTELLIGIBLE)")
+
             logger.info(f"🔄 UNINTELLIGIBLE 감지 → 재입력 요청")
             return {
                 "handled": True,
-                "action": SurveyAction.TAIL_QUESTION.value,
+                "action": SurveyAction.RETRY_QUESTION.value,
                 "analysis": "의미 추출 불가 (UNINTELLIGIBLE)",
                 "followup_message": "죄송하지만 답변을 잘 이해하지 못했어요. 다시 한 번 말씀해 주시겠어요?",
                 "followup_type": "rephrase_request",
@@ -260,6 +277,9 @@ class InteractionService:
 
         # OFF_TOPIC: 부드러운 재질문
         if validity_type == ValidityType.OFF_TOPIC:
+            if self._check_max_retries(request):
+                return self._force_pass_result(request, "질문 재시도 횟수 초과 (OFF_TOPIC)")
+
             logger.info(f"🔄 OFF_TOPIC 감지 → 부드러운 재질문")
             redirect_message = await self._generate_redirect_message(
                 original_question=request.current_question,
@@ -267,7 +287,7 @@ class InteractionService:
             )
             return {
                 "handled": True,
-                "action": SurveyAction.TAIL_QUESTION.value,
+                "action": SurveyAction.RETRY_QUESTION.value,
                 "analysis": "질문과 무관한 응답 (OFF_TOPIC)",
                 "followup_message": redirect_message,
                 "followup_type": "redirect",
@@ -275,6 +295,9 @@ class InteractionService:
 
         # AMBIGUOUS / CONTRADICTORY: 명확화 질문
         if validity_type in (ValidityType.AMBIGUOUS, ValidityType.CONTRADICTORY):
+            if self._check_max_retries(request):
+                return self._force_pass_result(request, f"질문 재시도 횟수 초과 ({validity_type.value})")
+
             logger.info(f"🔄 {validity_type.value} 감지 → 명확화 질문")
             clarify_message = await self._generate_clarify_message(
                 original_question=request.current_question,
@@ -283,7 +306,7 @@ class InteractionService:
             )
             return {
                 "handled": True,
-                "action": SurveyAction.TAIL_QUESTION.value,
+                "action": SurveyAction.RETRY_QUESTION.value,
                 "analysis": f"명확화 필요 ({validity_type.value})",
                 "followup_message": clarify_message,
                 "followup_type": "clarify",
@@ -291,6 +314,24 @@ class InteractionService:
 
         # 기본: VALID로 처리
         return {"handled": False}
+
+    def _check_max_retries(self, request: SurveyInteractionRequest) -> bool:
+        """최대 재시도 횟수(2회) 초과 여부 체크"""
+        return (request.retry_count or 0) >= 2
+
+    def _force_pass_result(self, request: SurveyInteractionRequest, reason: str) -> dict:
+        """재시도 초과 시 강제 PASS 결과 반환 (마지막 질문 체크 포함)"""
+        is_last = False
+        if request.current_question_order and request.total_questions:
+            is_last = request.current_question_order >= request.total_questions
+
+        return {
+            "handled": True,
+            "action": SurveyAction.PASS_TO_NEXT.value,
+            "analysis": reason,
+            "should_end": is_last,
+            "end_reason": EndReason.ALL_DONE.value if is_last else None,
+        }
 
     async def _generate_redirect_message(
         self, original_question: str, user_answer: str

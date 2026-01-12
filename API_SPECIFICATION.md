@@ -225,6 +225,8 @@ data: {"message": "구체적으로 어떤 상황에서 어려움을 느끼셨나
 | `analysis` | AI의 답변 분석 결과                      |
 | `token`    | 실시간 토큰 스트리밍 (꼬리 질문 생성 시) |
 | `done`     | 스트리밍 완료 및 최종 응답               |
+| `retry_request` | 재입력 요청 이벤트 (대화 보존)           |
+| `validity_result`| 응답 유효성 검사 결과                   |
 | `error`    | 에러 발생 시                             |
 
 **Action 타입**:
@@ -233,14 +235,26 @@ data: {"message": "구체적으로 어떤 상황에서 어려움을 느끼셨나
 | --------------- | ---------------------------------- |
 | `TAIL_QUESTION` | 꼬리 질문 생성 (추가 질문 필요)    |
 | `PASS_TO_NEXT`  | 다음 질문으로 넘어감 (충분한 답변) |
+| `RETRY_QUESTION`| 재입력 요청 (대화 내역 보존 및 재질문) |
 
 **최종 응답 구조**:
 
 | 필드       | 타입      | 설명                                               |
 | ---------- | --------- | -------------------------------------------------- |
-| `action`   | `string`  | AI의 판단 결과 (`TAIL_QUESTION` \| `PASS_TO_NEXT`) |
+| `action`   | `string`  | AI의 판단 결과 (`TAIL_QUESTION` \| `PASS_TO_NEXT` \| `RETRY_QUESTION`) |
 | `message`  | `string?` | 꼬리 질문 내용 (PASS 시 null)                      |
 | `analysis` | `string?` | 답변 분석 내용 (로그용/디버깅용)                   |
+
+> **RETRY_QUESTION 동작 방식**:
+> 이 액션이 반환되면 클라이언트는 AI의 메시지(재입력 요청)를 사용자에게 보여주고, **DB에 대화 내역으로 저장해야 합니다(History Preservation).**
+> - 이전 답변(User Input)은 그대로 유지합니다.
+> - AI의 재요청(AI Message)은 새로운 질문 노드로 저장합니다 (`Q_TYPE` 등을 `RETRY` 등으로 구분 권장).
+> - 이후 사용자의 답변은 새로운 답변 노드로 연결됩니다.
+
+**SSE 이벤트 흐름**:
+- **VALID 응답**: `start` → `validity_result` → `analyze_answer` → `reaction` → `continue`... → `generate_tail_complete` → `done`
+- **RETRY 응답**: `start` → `validity_result` → `analyze_answer` → `reaction` → `continue`... → `retry_request` → `done`
+- **REFUSAL 응답**: `start` → `validity_result` → `analyze_answer` → `reaction` → `done`
 
 ---
 
