@@ -8,7 +8,6 @@ import logging
 from collections.abc import AsyncGenerator
 from typing import TYPE_CHECKING
 
-from app.agents.conversation_workflow import build_survey_graph
 from app.core.exceptions import AIGenerationException
 from app.schemas.survey import (
     EndReason,
@@ -16,7 +15,9 @@ from app.schemas.survey import (
     SurveyAction,
     SurveyInteractionRequest,
     SurveyInteractionResponse,
+    ValidityType,
 )
+from app.services.validity_service import ValidityService
 
 if TYPE_CHECKING:
     from app.services.bedrock_service import BedrockService
@@ -24,55 +25,16 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 # 피로도 판단 기준
-MAX_WORDS_FOR_FATIGUE = 3  # 답변이 3단어 이하이면 피로 신호
-CONSECUTIVE_SHORT_ANSWERS_THRESHOLD = 3  # 연속 짧은 답변 횟수
+MAX_WORDS_FOR_FATIGUE = 2
+CONSECUTIVE_SHORT_ANSWERS_THRESHOLD = 3
 
 
 class InteractionService:
-    """설문/인터뷰 상호작용 서비스 (LangGraph Wrapper)"""
+    """설문/인터뷰 상호작용 서비스"""
 
     def __init__(self, bedrock_service: "BedrockService"):
         self.bedrock_service = bedrock_service
-        self.graph = build_survey_graph(bedrock_service)
-
-    # =========================================================================
-    # 동기 메서드 (하위 호환)
-    # =========================================================================
-
-    def process_interaction(
-        self, request: SurveyInteractionRequest
-    ) -> SurveyInteractionResponse:
-        """사용자 요청을 처리하고 AI 응답을 반환합니다 (동기)."""
-        input_state = {
-            "session_id": request.session_id,
-            "user_answer": request.user_answer,
-            "current_question": request.current_question,
-            "game_info": request.game_info,
-            "conversation_history": request.conversation_history,
-        }
-
-        config = {"configurable": {"thread_id": request.session_id}}
-
-        try:
-            final_state = self.graph.invoke(input_state, config=config)
-
-            action = final_state.get("action")
-            message = final_state.get("message")
-            analysis = final_state.get("analysis")
-
-            if not action:
-                logger.warning(
-                    f"⚠️ Action not found. Defaulting to PASS_TO_NEXT. State: {final_state}"
-                )
-                action = SurveyAction.PASS_TO_NEXT.value
-
-            return SurveyInteractionResponse(
-                action=action, message=message, analysis=analysis
-            )
-
-        except Exception as e:
-            logger.error(f"❌ Interaction Graph Error: {e}")
-            raise AIGenerationException(f"설문 상호작용 처리 실패: {e}") from e
+        self.validity_service = ValidityService(bedrock_service)
 
     # =========================================================================
     # SSE 스트리밍 메서드 (메인)
@@ -86,20 +48,81 @@ class InteractionService:
 
         이벤트 순서:
         1. start: 처리 시작
-        2. analyze_answer: 답변 분석 결과 (action, analysis, should_end)
-        3. reaction: 리액션 (DB 저장 X)
-        4. continue (반복): 꼬리질문 토큰 스트리밍 (TAIL_QUESTION인 경우)
-        5. generate_tail_complete: 꼬리질문 생성 완료 (TAIL_QUESTION인 경우)
-        6. done: 처리 완료
+        2. validity_result: 유효성 평가 결과 (신규)
+        3. analyze_answer: 답변 분석 결과
+        4. reaction: 리액션
+        5. continue (반복): 꼬리질문/재질문 토큰 스트리밍
+        6. generate_tail_complete: 꼬리질문 생성 완료
+        7. done: 처리 완료
         """
         try:
             yield self._sse_event("start", {"status": "processing", "phase": "main"})
 
             # =====================================================
-            # 규칙 기반 PASS_TO_NEXT 판단 (AI 호출 전 선행 체크)
+            # Stage 1: 유효성 평가 (신규)
+            # =====================================================
+            validity_result = await self.validity_service.evaluate_validity(
+                answer=request.user_answer,
+                current_question=request.current_question,
+            )
+
+            yield self._sse_event("validity_result", {
+                "validity": validity_result.validity.value,
+                "confidence": validity_result.confidence,
+                "reason": validity_result.reason,
+                "source": validity_result.source,
+            })
+
+            # =====================================================
+            # Stage 2: 유효성 기반 라우팅
+            # =====================================================
+            routing_result = await self._route_by_validity(
+                validity_type=validity_result.validity,
+                request=request,
+            )
+
+            # 라우팅 결과에 따른 처리
+            if routing_result["handled"]:
+                # 유효성 분기에서 처리 완료 (REFUSAL, OFF_TOPIC 등)
+                yield self._sse_event("analyze_answer", {
+                    "action": routing_result["action"],
+                    "analysis": routing_result["analysis"],
+                    "should_end": routing_result.get("should_end", False),
+                    "end_reason": routing_result.get("end_reason"),
+                })
+
+                # 리액션
+                reaction_text = await self.bedrock_service.generate_reaction_async(
+                    user_answer=request.user_answer
+                )
+                yield self._sse_event("reaction", {"reaction_text": reaction_text})
+
+                # 재질문/명확화 질문이 있으면 스트리밍
+                if routing_result.get("followup_message"):
+                    for char in routing_result["followup_message"]:
+                        yield self._sse_event("continue", {"content": char})
+
+                    yield self._sse_event("generate_tail_complete", {
+                        "message": routing_result["followup_message"],
+                        "followup_type": routing_result.get("followup_type", "redirect"),
+                    })
+
+                yield self._sse_event("done", {
+                    "status": "completed",
+                    "action": routing_result["action"],
+                    "phase": InterviewPhase.MAIN.value,
+                    "question_text": routing_result.get("followup_message"),
+                    "should_end": routing_result.get("should_end", False),
+                    "end_reason": routing_result.get("end_reason"),
+                    "validity": validity_result.validity.value,
+                })
+                return
+
+            # =====================================================
+            # Stage 3: VALID 응답 - 기존 로직 (품질 평가 → 꼬리질문)
             # =====================================================
 
-            # 꼬리질문 횟수 (신규 필드 우선, 없으면 기존 probe_count 사용)
+            # 꼬리질문 횟수
             max_tails = request.max_tail_questions if request.max_tail_questions is not None else 3
             current_tails = request.current_tail_count if request.current_tail_count is not None else request.probe_count
 
@@ -108,14 +131,6 @@ class InteractionService:
             if request.current_question_order and request.total_questions:
                 is_last_question = request.current_question_order >= request.total_questions
 
-            # 짧은 답변 감지
-            SHORT_ANSWERS = {"응", "어", "아니", "없어", "그냥", "몰라", "네", "아뇨", "ㅇㅇ", "ㄴㄴ", "몰름", "글쎄", "좋아", "별로"}
-            STOP_PHRASES = {"그만", "다음", "넘어가", "스킵", "다른 질문", "넘어갈게", "패스"}
-
-            answer_stripped = request.user_answer.strip()
-            is_short_answer = answer_stripped in SHORT_ANSWERS or len(answer_stripped) <= 5
-            wants_skip = any(phrase in request.user_answer for phrase in STOP_PHRASES)
-
             # 규칙 기반 강제 PASS 판단
             force_pass = False
             force_pass_reason = ""
@@ -123,31 +138,16 @@ class InteractionService:
             if current_tails >= max_tails:
                 force_pass = True
                 force_pass_reason = f"꼬리질문 횟수 제한({max_tails}회) 도달"
-                logger.info(f"🛑 Tail limit reached: {current_tails}/{max_tails}")
-            elif is_short_answer and current_tails >= 1:
-                force_pass = True
-                force_pass_reason = "꼬리질문 후에도 짧은 답변 지속"
-                logger.info(f"🛑 Short answer after tail question: '{answer_stripped}'")
-            elif wants_skip:
-                force_pass = True
-                force_pass_reason = "사용자가 다음 질문 요청"
-                logger.info(f"🛑 User requested skip: '{request.user_answer}'")
 
-            # =====================================================
-            # AI 답변 분석 (force_pass가 아닌 경우만)
-            # =====================================================
-
+            # AI 답변 분석
             if force_pass:
-                # AI 호출 생략, 규칙 기반 결과 사용
                 analyze_result = {
                     "action": SurveyAction.PASS_TO_NEXT.value,
                     "analysis": force_pass_reason,
                 }
             else:
-                # 피로도 체크 (간단한 휴리스틱)
                 fatigue_check = self._check_fatigue(request)
 
-                # AI 답변 분석
                 analyze_result = await self.bedrock_service.analyze_answer_async(
                     current_question=request.current_question,
                     user_answer=request.user_answer,
@@ -156,7 +156,6 @@ class InteractionService:
                     conversation_history=request.conversation_history,
                 )
 
-                # 피로도 감지 시 강제 PASS
                 if fatigue_check["fatigued"]:
                     analyze_result["action"] = SurveyAction.PASS_TO_NEXT.value
                     analyze_result["analysis"] = "피로도 감지로 다음 질문으로 이동"
@@ -177,13 +176,13 @@ class InteractionService:
                 "end_reason": end_reason,
             })
 
-            # Step 2: 리액션 생성 및 전송 (DB 저장 X, UI 표시용)
+            # 리액션
             reaction_text = await self.bedrock_service.generate_reaction_async(
                 user_answer=request.user_answer
             )
             yield self._sse_event("reaction", {"reaction_text": reaction_text})
 
-            # Step 3: 꼬리 질문 필요 시 토큰 스트리밍
+            # 꼬리 질문 스트리밍
             full_message = ""
 
             if action == SurveyAction.TAIL_QUESTION.value and not should_end:
@@ -196,13 +195,11 @@ class InteractionService:
                     full_message += token
                     yield self._sse_event("continue", {"content": token})
 
-                # 꼬리질문 생성 완료
                 yield self._sse_event("generate_tail_complete", {
                     "message": full_message,
                     "tail_question_count": current_tails + 1,
                 })
 
-            # 완료 이벤트 (phase, should_end 포함)
             yield self._sse_event("done", {
                 "status": "completed",
                 "action": action,
@@ -210,6 +207,7 @@ class InteractionService:
                 "question_text": full_message if full_message else None,
                 "should_end": should_end,
                 "end_reason": end_reason,
+                "validity": validity_result.validity.value,
             })
 
         except Exception as e:
@@ -217,25 +215,111 @@ class InteractionService:
             yield self._sse_event("error", {"message": str(e)})
 
     # =========================================================================
-    # 피로도 체크 (AI 판단 보조)
+    # 유효성 기반 라우팅 (신규)
+    # =========================================================================
+
+    async def _route_by_validity(
+        self,
+        validity_type: ValidityType,
+        request: SurveyInteractionRequest,
+    ) -> dict:
+        """
+        유효성 분류에 따른 라우팅 처리.
+
+        Returns:
+            handled: True면 이 함수에서 처리 완료, False면 기존 로직으로
+        """
+        # 꼬리질문 횟수
+        current_tails = request.current_tail_count if request.current_tail_count is not None else request.probe_count
+
+        # VALID: 기존 로직으로 넘김
+        if validity_type == ValidityType.VALID:
+            return {"handled": False}
+
+        # REFUSAL: 피로도 +1, 다음 질문으로
+        if validity_type == ValidityType.REFUSAL:
+            logger.info(f"🛑 REFUSAL 감지 → 다음 질문으로 이동")
+            return {
+                "handled": True,
+                "action": SurveyAction.PASS_TO_NEXT.value,
+                "analysis": "답변 거부 감지 (REFUSAL)",
+                "should_end": False,
+                "fatigue_increment": 1.0,  # 피로도 증가 (Spring에서 처리)
+            }
+
+        # UNINTELLIGIBLE: 재입력 요청
+        if validity_type == ValidityType.UNINTELLIGIBLE:
+            logger.info(f"🔄 UNINTELLIGIBLE 감지 → 재입력 요청")
+            return {
+                "handled": True,
+                "action": SurveyAction.TAIL_QUESTION.value,
+                "analysis": "의미 추출 불가 (UNINTELLIGIBLE)",
+                "followup_message": "죄송하지만 답변을 잘 이해하지 못했어요. 다시 한 번 말씀해 주시겠어요?",
+                "followup_type": "rephrase_request",
+            }
+
+        # OFF_TOPIC: 부드러운 재질문
+        if validity_type == ValidityType.OFF_TOPIC:
+            logger.info(f"🔄 OFF_TOPIC 감지 → 부드러운 재질문")
+            redirect_message = await self._generate_redirect_message(
+                original_question=request.current_question,
+                user_answer=request.user_answer,
+            )
+            return {
+                "handled": True,
+                "action": SurveyAction.TAIL_QUESTION.value,
+                "analysis": "질문과 무관한 응답 (OFF_TOPIC)",
+                "followup_message": redirect_message,
+                "followup_type": "redirect",
+            }
+
+        # AMBIGUOUS / CONTRADICTORY: 명확화 질문
+        if validity_type in (ValidityType.AMBIGUOUS, ValidityType.CONTRADICTORY):
+            logger.info(f"🔄 {validity_type.value} 감지 → 명확화 질문")
+            clarify_message = await self._generate_clarify_message(
+                original_question=request.current_question,
+                user_answer=request.user_answer,
+                validity_type=validity_type,
+            )
+            return {
+                "handled": True,
+                "action": SurveyAction.TAIL_QUESTION.value,
+                "analysis": f"명확화 필요 ({validity_type.value})",
+                "followup_message": clarify_message,
+                "followup_type": "clarify",
+            }
+
+        # 기본: VALID로 처리
+        return {"handled": False}
+
+    async def _generate_redirect_message(
+        self, original_question: str, user_answer: str
+    ) -> str:
+        """OFF_TOPIC 응답에 대한 부드러운 재질문 생성"""
+        # 간단한 템플릿 (추후 LLM으로 개선 가능)
+        return f"그 부분도 좋은 의견이네요! 혹시 원래 질문으로 돌아가서, {original_question.rstrip('?')}에 대해서는 어떻게 생각하세요?"
+
+    async def _generate_clarify_message(
+        self, original_question: str, user_answer: str, validity_type: ValidityType
+    ) -> str:
+        """AMBIGUOUS/CONTRADICTORY 응답에 대한 명확화 질문 생성"""
+        if validity_type == ValidityType.AMBIGUOUS:
+            return "조금 더 구체적으로 말씀해 주실 수 있을까요? 어떤 부분을 말씀하시는 건지 궁금해요."
+        else:  # CONTRADICTORY
+            return "앞서 말씀하신 내용이 조금 다르게 느껴지는데, 좀 더 설명해 주실 수 있을까요?"
+
+    # =========================================================================
+    # 피로도 체크
     # =========================================================================
 
     def _check_fatigue(self, request: SurveyInteractionRequest) -> dict:
-        """
-        테스터 피로도를 휴리스틱으로 체크.
-
-        기준:
-        - 답변이 3단어 이하
-        - 연속으로 3회 짧은 답변 (대화 기록에서 확인)
-        """
+        """테스터 피로도를 휴리스틱으로 체크."""
         def is_short_answer(text: str) -> bool:
-            """3단어 이하인지 체크"""
             words = text.strip().split()
             return len(words) <= MAX_WORDS_FOR_FATIGUE
 
         current_answer_short = is_short_answer(request.user_answer)
 
-        # 대화 기록에서 연속 짧은 답변 체크
         consecutive_short = 0
         if request.conversation_history:
             for entry in reversed(request.conversation_history):
@@ -251,9 +335,7 @@ class InteractionService:
         fatigued = consecutive_short >= CONSECUTIVE_SHORT_ANSWERS_THRESHOLD
 
         if fatigued:
-            logger.info(
-                f"😓 Fatigue detected: {consecutive_short} consecutive short answers (3 words or less)"
-            )
+            logger.info(f"😓 Fatigue detected: {consecutive_short} consecutive short answers")
 
         return {
             "fatigued": fatigued,

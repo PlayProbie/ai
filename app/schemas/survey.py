@@ -36,6 +36,29 @@ class QuestionType(str, Enum):
     TAIL = "TAIL"
 
 
+class ValidityType(str, Enum):
+    """응답 유효성 분류 (Krosnick 6분류)"""
+    VALID = "VALID"                     # 질문과 의미적 연관성 존재
+    OFF_TOPIC = "OFF_TOPIC"             # 질문과 무관
+    AMBIGUOUS = "AMBIGUOUS"             # 지시어 불명확 ("그거", "거기서")
+    CONTRADICTORY = "CONTRADICTORY"     # 상반 진술
+    REFUSAL = "REFUSAL"                 # 답변 거부
+    UNINTELLIGIBLE = "UNINTELLIGIBLE"   # 의미 추출 불가
+
+
+class ValidityResult(BaseModel):
+    """유효성 평가 결과"""
+    model_config = ConfigDict(
+        str_strip_whitespace=True,
+        populate_by_name=True,
+    )
+
+    validity: ValidityType = Field(..., description="응답 유효성 분류")
+    confidence: float = Field(..., ge=0.0, le=1.0, description="신뢰도")
+    reason: str = Field(..., description="판단 근거")
+    source: str = Field("rule", description="판단 출처 (rule/llm)")
+
+
 # =============================================================================
 # Tester Profile (Phase 1에서 수집)
 # =============================================================================
@@ -51,7 +74,7 @@ class TesterProfile(BaseModel):
     age_group: str | None = Field(None, description="연령대 (10대, 20대, 30대, ...)")
     gender: str | None = Field(None, description="성별 (남성, 여성, 기타)")
     prefer_genre: str | None = Field(None, description="선호 장르 (RPG, FPS, ...)")
-    skill_level: str | None = Field(None, description="숙련도 (입문자, 캐주얼, 코어, 하드코어)")
+    #skill_level: str | None = Field(None, description="숙련도 (입문자, 캐주얼, 코어, 하드코어)")
 
 
 # =============================================================================
