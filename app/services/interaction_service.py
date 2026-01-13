@@ -13,7 +13,6 @@ from app.schemas.survey import (
     SurveyAction,
     SurveyInteractionRequest,
 )
-from app.services.validity_service import ValidityService
 
 if TYPE_CHECKING:
     from app.services.bedrock_service import BedrockService
@@ -22,7 +21,7 @@ logger = logging.getLogger(__name__)
 
 
 class InteractionService:
-    """설문/인터뷰 상호작용 서비스"""
+    """설문/인터뷰 상호작용 서비스 (LangGraph Wrapper)"""
 
     def __init__(self, bedrock_service: "BedrockService"):
         self.bedrock_service = bedrock_service
