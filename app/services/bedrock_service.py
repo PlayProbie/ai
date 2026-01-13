@@ -20,7 +20,9 @@ from app.schemas.fixed_question import (
     FixedQuestionFeedback,
     FixedQuestionFeedbackCreate,
 )
-from app.schemas.survey import AnswerAnalysis
+from app.schemas.survey import AnswerAnalysis # 삭제 가능해지면 삭제
+from app.schemas.survey import ValidityType, ValidityResult
+from app.schemas.survey import QualityResult, QualityType
 
 logger = logging.getLogger(__name__)
 
@@ -120,6 +122,73 @@ class BedrockService:
             raise AIGenerationException(
                 f"질문 피드백 생성 중 오류 발생: {error}"
             ) from error
+
+    @bedrock_retry
+    async def evaluate_validity_async(
+        self,
+        answer: str,
+        current_question: str,
+    ) -> ValidityResult:
+        """LLM 기반 응답 유효성 평가 (비동기)."""
+        from app.core.prompts import VALIDITY_EVALUATION_PROMPT
+
+        try:
+            prompt = ChatPromptTemplate.from_template(VALIDITY_EVALUATION_PROMPT)
+            structured_llm = self.chat_model.with_structured_output(ValidityResult)
+            chain = prompt | structured_llm
+
+            result: ValidityResult = await chain.ainvoke(
+                {
+                    "current_question": current_question,
+                    "user_answer": answer,
+                }
+            )
+            return result
+
+        except Exception as error:
+            logger.error(f"❌ 유효성 평가 실패: {error}")
+            # 실패 시 VALID로 폴백 (관대하게)
+            return ValidityResult(
+                validity=ValidityType.VALID,
+                confidence=0.5,
+                reason=f"LLM 평가 실패, 기본값 반환: {error}",
+                source="fallback",
+            )
+
+    @bedrock_retry
+    async def evaluate_quality_async(
+        self,
+        answer: str,
+        current_question: str,
+        game_context: str,
+    ) -> QualityResult:
+        """LLM 기반 응답 품질 평가 (Thickness × Richness)."""
+        from app.core.prompts import QUALITY_EVALUATION_PROMPT
+
+        try:
+            prompt = ChatPromptTemplate.from_template(QUALITY_EVALUATION_PROMPT)
+            structured_llm = self.chat_model.with_structured_output(QualityResult)
+            chain = prompt | structured_llm
+
+            result: QualityResult = await chain.ainvoke(
+                {
+                    "current_question": current_question,
+                    "user_answer": answer,
+                    "game_context": game_context,
+                }
+            )
+            return result
+
+        except Exception as error:
+            logger.error(f"❌ 품질 평가 실패: {error}")
+            # 실패 시 EMPTY로 폴백 (보수적으로)
+            return QualityResult(
+                thickness="LOW",
+                thickness_evidence=[],
+                richness="LOW",
+                richness_evidence=[],
+                quality=QualityType.EMPTY,
+            )
 
     def _format_history(self, history: list[dict] | None) -> str:
         """대화 기록을 LLM이 읽기 쉬운 포맷으로 변환."""
