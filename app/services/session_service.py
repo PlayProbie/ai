@@ -56,7 +56,6 @@ OPENING_QUESTION_PROMPT = """당신은 게임 플레이테스트 인터뷰어입
 테스터에게 첫 번째 오프닝 질문을 해주세요.
 
 게임 이름: {game_name}
-게임 장르: {game_genre}
 게임 설명: {game_context}
 
 요구사항:
