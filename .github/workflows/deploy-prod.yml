@@ -1,11 +1,11 @@
-name: Deploy to ECR and EC2
+name: Deploy to ECR and EC2 (Prod)
 
 on:
   push:
-    branches: ["develop", "feat/#31"]
+    branches: ["main"]
 
 concurrency:
-  group: deploy-develop
+  group: deploy-prod
   cancel-in-progress: true
 
 env:
@@ -54,7 +54,7 @@ jobs:
           push: true
           tags: |
             ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}:${{ env.IMAGE_TAG }}
-            ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}:develop-latest
+            ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}:prod-latest
           # ECR Registry Cache: GHA 캐시보다 빠르고 용량 제한 없음
           cache-from: type=registry,ref=${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}:cache
           cache-to: type=registry,ref=${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}:cache,mode=max
@@ -63,7 +63,7 @@ jobs:
     needs: build-and-push
     runs-on: ubuntu-latest
     timeout-minutes: 10
-    environment: development
+    environment: production
 
     steps:
       - name: Configure AWS credentials
@@ -81,29 +81,29 @@ jobs:
         run: |
           COMMAND_ID=$(aws ssm send-command \
             --document-name "AWS-RunShellScript" \
-            --targets "Key=instanceids,Values=${{ secrets.DEV_EC2_INSTANCE_ID }}" \
-            --comment "Deploying FastAPI via SSM" \
+            --targets "Key=instanceids,Values=${{ secrets.PROD_EC2_INSTANCE_ID }}" \
+            --comment "Deploying FastAPI via SSM (Prod)" \
             --parameters 'commands=[
               "set -e",
               "trap \"rm -f /tmp/fastapi-ai/.env\" EXIT",
               "aws ecr get-login-password --region ${{ env.AWS_REGION }} | docker login --username AWS --password-stdin ${{ steps.login-ecr.outputs.registry }}",
-              "docker stop fastapi-dev-app || true",
-              "docker rm fastapi-dev-app || true",
+              "docker stop fastapi-prod-app || true",
+              "docker rm fastapi-prod-app || true",
               "docker image prune -af",
-              "docker pull ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}:develop-latest",
+              "docker pull ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}:prod-latest",
               "mkdir -p /tmp/fastapi-ai",
               "echo \"AWS_ACCESS_KEY_ID=${{ secrets.AWS_ACCESS_KEY_ID }}\" > /tmp/fastapi-ai/.env",
               "echo \"AWS_SECRET_ACCESS_KEY=${{ secrets.AWS_SECRET_ACCESS_KEY }}\" >> /tmp/fastapi-ai/.env",
               "echo \"AWS_REGION=${{ secrets.AWS_REGION }}\" >> /tmp/fastapi-ai/.env",
               "echo \"BEDROCK_REGION=${{ secrets.BEDROCK_REGION }}\" >> /tmp/fastapi-ai/.env",
-              "echo \"AWS_BEDROCK_API_KEY=${{ secrets.DEV_AWS_BEDROCK_API_KEY }}\" >> /tmp/fastapi-ai/.env",
-              "echo \"BEDROCK_MODEL_ID=${{ secrets.DEV_BEDROCK_MODEL_ID }}\" >> /tmp/fastapi-ai/.env",
-              "echo \"BEDROCK_EMBEDDING_MODEL_ID=${{ secrets.DEV_BEDROCK_EMBEDDING_MODEL_ID }}\" >> /tmp/fastapi-ai/.env",
-              "echo \"TEMPERATURE=${{ secrets.DEV_TEMPERATURE }}\" >> /tmp/fastapi-ai/.env",
-              "echo \"MAX_TOKENS=${{ secrets.DEV_MAX_TOKENS }}\" >> /tmp/fastapi-ai/.env",
-              "echo \"TOP_P=${{ secrets.DEV_TOP_P }}\" >> /tmp/fastapi-ai/.env",
+              "echo \"AWS_BEDROCK_API_KEY=${{ secrets.PROD_AWS_BEDROCK_API_KEY }}\" >> /tmp/fastapi-ai/.env",
+              "echo \"BEDROCK_MODEL_ID=${{ secrets.PROD_BEDROCK_MODEL_ID }}\" >> /tmp/fastapi-ai/.env",
+              "echo \"BEDROCK_EMBEDDING_MODEL_ID=${{ secrets.PROD_BEDROCK_EMBEDDING_MODEL_ID }}\" >> /tmp/fastapi-ai/.env",
+              "echo \"TEMPERATURE=${{ secrets.PROD_TEMPERATURE }}\" >> /tmp/fastapi-ai/.env",
+              "echo \"MAX_TOKENS=${{ secrets.PROD_MAX_TOKENS }}\" >> /tmp/fastapi-ai/.env",
+              "echo \"TOP_P=${{ secrets.PROD_TOP_P }}\" >> /tmp/fastapi-ai/.env",
               "chmod 600 /tmp/fastapi-ai/.env",
-              "docker run -d --name fastapi-dev-app --restart unless-stopped -p 8000:8000 --env-file /tmp/fastapi-ai/.env ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}:develop-latest",
+              "docker run -d --name fastapi-prod-app --restart unless-stopped -p 8000:8000 --env-file /tmp/fastapi-ai/.env -v /home/ubuntu/chroma_data:/app/chroma_data ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}:prod-latest",
               "echo \"Waiting for application to start...\"",
               "sleep 60",
               "curl -f http://localhost:8000/health || exit 1",
@@ -121,7 +121,7 @@ jobs:
             sleep 30
             STATUS=$(aws ssm get-command-invocation \
               --command-id $COMMAND_ID \
-              --instance-id ${{ secrets.DEV_EC2_INSTANCE_ID }} \
+              --instance-id ${{ secrets.PROD_EC2_INSTANCE_ID }} \
               --query 'Status' \
               --output text 2>/dev/null || echo "Pending")
 
@@ -134,7 +134,7 @@ jobs:
               echo "::error::Deployment failed with status: $STATUS"
               aws ssm get-command-invocation \
                 --command-id $COMMAND_ID \
-                --instance-id ${{ secrets.DEV_EC2_INSTANCE_ID }} \
+                --instance-id ${{ secrets.PROD_EC2_INSTANCE_ID }} \
                 --query 'StandardErrorContent' \
                 --output text
               exit 1
