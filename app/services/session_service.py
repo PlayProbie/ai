@@ -26,15 +26,29 @@ logger = logging.getLogger(__name__)
 # Prompts
 # =============================================================================
 
-GREETING_PROMPT = """게임 플레이테스트를 막 끝내고 설문조사를 하러 온 테스터에게 친근한 인사를 해주세요.
-게임 이름: {game_name}
+GREETING_PROMPT = """당신은 게임 플레이테스트 인터뷰어입니다.
+테스터를 맞이하는 환영 인사를 해주세요.
 
-요구사항:
-- 1문장, 20자 이내
+# 정보
+- 게임 이름: {game_name}
+- 게임 장르: {game_genre}
+- 게임 설명: {game_context}
+- 테스트 단계: {test_phase}
+- 목표 테마: {target_theme}
+
+# 인사말 구성 (순서대로)
+1. 게임 간단 소개 (1문장): 게임 이름과 핵심 특징을 짧게 언급
+2. 설문 목적 설명 (1문장): 이번 테스트/설문의 목적을 간단히 설명
+3. 환영 인사 (1문장): 테스터에게 친근한 환영 메시지
+
+# 요구사항
+- 총 2-3문장, 100자 이내
 - 이모지 1-2개 사용 (👋, 🎮, 😊)
-- 친근하고 캐주얼한 말투
-- "감사합니다" 사용 금지
-- 예시: "안녕하세요! 👋 {game_name} 인터뷰를 시작해볼게요 🎮"
+- 친근하고 캐주얼한 존댓말
+- "감사합니다" 대신 "반갑습니다", "환영합니다" 사용
+
+# 예시
+"{game_name}을 플레이해주셔서 감사합니다! 🎮 오늘은 [목표 테마]에 대한 의견을 들어보려 해요. 편하게 이야기해 주세요! 👋"
 
 인사말:"""
 
@@ -144,13 +158,21 @@ class SessionService:
 
             game_info = request.game_info or {}
             game_name = game_info.get("name", "게임")
+            game_context = game_info.get("game_context", "")
+            test_phase = game_info.get("test_phase", "")
+            target_theme = game_info.get("target_theme", "")
 
             greeting = ""
 
             # 인사말 생성 및 스트리밍
             async for token in self._stream_prompt(
                 GREETING_PROMPT,
-                {"game_name": game_name},
+                {
+                    "game_name": game_name,
+                    "game_context": game_context,
+                    "test_phase": test_phase,
+                    "target_theme": target_theme,
+                },
             ):
                 greeting += token
                 yield self._sse_event("greeting_continue", {"content": token})

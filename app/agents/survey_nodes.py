@@ -260,7 +260,8 @@ class SurveyNodes:
         """리액션 생성"""
         logger.info(f"✨ [reaction] 리액션 생성 시작 (PASS_TO_NEXT Path)")
         reaction = await self.bedrock.generate_reaction_async(
-            user_answer=state["user_answer"]
+            user_answer=state["user_answer"],
+            current_question=state.get("current_question", ""),
         )
         return {"reaction": reaction}
 

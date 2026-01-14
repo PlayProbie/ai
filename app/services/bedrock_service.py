@@ -293,13 +293,16 @@ class BedrockService:
                 f"꼬리 질문 생성 중 오류 발생: {error}"
             ) from error
 
-    async def generate_reaction_async(self, user_answer: str) -> str:
+    async def generate_reaction_async(self, user_answer: str, current_question: str = "") -> str:
         """사용자 답변에 대한 간단한 리액션 생성 (DB 저장 X, UI 표시용)."""
         try:
             prompt = ChatPromptTemplate.from_template(GENERATE_REACTION_PROMPT)
             chain = prompt | self.chat_model
 
-            response = await chain.ainvoke({"user_answer": user_answer})
+            response = await chain.ainvoke({
+                "user_answer": user_answer,
+                "current_question": current_question,
+            })
             return response.content.strip()
 
         except Exception as error:
