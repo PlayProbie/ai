@@ -53,6 +53,25 @@ class AnalyticsService:
     MAX_REPRESENTATIVE_DOCS = 5  # 대표 문서 최대 개수
     MAX_KEYWORDS = 5  # c-TF-IDF 키워드 최대 개수
 
+    # === Quality/Validity 가중치 ===
+    QUALITY_WEIGHTS = {
+        "FULL": 1.0,  # 완전한 응답 - 최고 가중치
+        "GROUNDED": 0.8,  # 상황만 설명
+        "FLOATING": 0.6,  # 감정만 표현
+        "EMPTY": 0.3,  # 단답형 - 낮은 가중치
+        None: 0.5,  # 메타데이터 없음 (기존 데이터)
+    }
+
+    VALIDITY_WEIGHTS = {
+        "VALID": 1.0,
+        "AMBIGUOUS": 0.5,
+        "CONTRADICTORY": 0.5,
+        "OFF_TOPIC": 0.0,  # 필터링 대상
+        "REFUSAL": 0.0,  # 필터링 대상
+        "UNINTELLIGIBLE": 0.0,  # 필터링 대상
+        None: 1.0,  # 기존 데이터 보존
+    }
+
     def __init__(
         self,
         embedding_service: EmbeddingService,
@@ -68,7 +87,7 @@ class AnalyticsService:
     # =========================================================================
 
     def _query_answers_from_chromadb(
-        self, fixed_question_id: int, survey_uuid: str
+        self, fixed_question_id: int, survey_uuid: str, filter_invalid: bool = True
     ) -> dict:
         """ChromaDB에서 특정 질문에 대한 답변들 + 임베딩 조회"""
         try:
@@ -86,12 +105,22 @@ class AnalyticsService:
                 )
                 return {"ids": [], "documents": [], "metadatas": [], "embeddings": []}
 
-            # survey_uuid로 추가 필터링 (Python에서 처리)
-            filtered_indices = [
-                i
-                for i, meta in enumerate(results["metadatas"])
-                if meta.get("survey_uuid") == survey_uuid
-            ]
+            # survey_uuid + Validity 필터링 (Python에서 처리)
+            filtered_indices = []
+            for i, meta in enumerate(results["metadatas"]):
+                if meta.get("survey_uuid") != survey_uuid:
+                    continue
+
+                # === 신규: Validity 필터링 ===
+                if filter_invalid:
+                    validity = meta.get("validity")
+                    if validity in ["OFF_TOPIC", "REFUSAL", "UNINTELLIGIBLE"]:
+                        logger.debug(
+                            f"🚫 Filtered out document {i} due to validity={validity}"
+                        )
+                        continue
+
+                filtered_indices.append(i)
 
             if not filtered_indices:
                 logger.warning(
@@ -186,7 +215,10 @@ class AnalyticsService:
     # =========================================================================
 
     def _extract_keywords_ctfidf(
-        self, documents: list[str], cluster_indices: dict[int, list[int]]
+        self,
+        documents: list[str],
+        metadatas: list[dict],
+        cluster_indices: dict[int, list[int]],
     ) -> dict[int, list[str]]:
         """c-TF-IDF로 각 클러스터의 대표 키워드 추출 (Kiwi 형태소 분석 적용)"""
         if not documents or not cluster_indices:
@@ -215,13 +247,24 @@ class AnalyticsService:
                 ]
                 return " ".join(keywords)
 
-            # 클러스터별로 답변만 합쳐서 '메타 문서' 생성
+            # 클러스터별로 답변만 합쳐서 '메타 문서' 생성 (품질 가중치 적용)
             cluster_docs = []
             cluster_labels = []
             for label, indices in cluster_indices.items():
-                # 질문 제외, 답변만 추출하여 결합
-                answers_only = [extract_answers_only(documents[i]) for i in indices]
-                combined = " ".join(answers_only)
+                weighted_answers = []
+
+                for i in indices:
+                    answer = extract_answers_only(documents[i])
+
+                    # === 신규: 품질 기반 중복 ===
+                    quality = metadatas[i].get("quality")
+                    weight = self.QUALITY_WEIGHTS.get(quality, 0.5)
+
+                    # 가중치에 따라 중복 (FULL=3회, GROUNDED=2회, 기타=1회)
+                    repeat_count = max(1, int(weight * 3))
+                    weighted_answers.extend([answer] * repeat_count)
+
+                combined = " ".join(weighted_answers)
                 # Kiwi로 토큰화
                 tokenized = tokenize_korean(combined)
                 cluster_docs.append(tokenized)
@@ -269,6 +312,7 @@ class AnalyticsService:
         self,
         embeddings: np.ndarray,
         indices: list[int],
+        metadatas: list[dict] = None,
         n_docs: int = 5,
     ) -> list[int]:
         """MMR로 대표 문서 선정 (유사도 + 다양성 균형)"""
@@ -304,7 +348,20 @@ class AnalyticsService:
                     rel = relevance[idx]
                     # 이미 선택된 문서들과의 최대 유사도
                     max_sim = max(normalized[idx] @ normalized[s] for s in selected)
-                    mmr = self.MMR_LAMBDA * rel - (1 - self.MMR_LAMBDA) * max_sim
+
+                    # === 신규: 품질 보너스 ===
+                    quality_bonus = 0.0
+                    if metadatas is not None:
+                        quality = metadatas[indices[idx]].get("quality")
+                        quality_bonus = (
+                            self.QUALITY_WEIGHTS.get(quality, 0.5) * 0.2
+                        )  # 최대 +0.2
+
+                    mmr = (
+                        self.MMR_LAMBDA * rel
+                        - (1 - self.MMR_LAMBDA) * max_sim
+                        + quality_bonus
+                    )
                     mmr_scores.append(mmr)
                 best_idx = remaining[np.argmax(mmr_scores)]
 
@@ -523,6 +580,7 @@ class AnalyticsService:
 
             ids = results["ids"]
             documents = results["documents"]
+            metadatas = results["metadatas"]  # ← 추가
             embeddings = np.array(results["embeddings"])
 
             # Step 3: UMAP 차원 축소
@@ -535,10 +593,12 @@ class AnalyticsService:
                 reduced_embeddings
             )
 
-            # Step 5: c-TF-IDF 키워드 추출
+            # Step 5: c-TF-IDF 키워드 추출 (가중치 적용)
             yield f"event: progress\ndata: {json.dumps({'step': 'extracting_keywords', 'progress': 50})}\n\n"
             keywords_by_cluster = self._extract_keywords_ctfidf(
-                documents, cluster_indices
+                documents,
+                metadatas,
+                cluster_indices,  # ← metadatas 추가
             )
 
             # Step 6: 클러스터별 LLM 분석 (병렬 처리)
@@ -549,9 +609,12 @@ class AnalyticsService:
             llm_tasks = []
 
             for cluster_label, indices in cluster_indices.items():
-                # MMR로 대표 문서 선정
+                # MMR로 대표 문서 선정 (품질 보너스 적용)
                 rep_indices = self._select_representatives_mmr(
-                    embeddings, indices, self.MAX_REPRESENTATIVE_DOCS
+                    embeddings,
+                    indices,
+                    metadatas,
+                    self.MAX_REPRESENTATIVE_DOCS,  # ← metadatas 추가
                 )
                 rep_docs = [documents[i] for i in rep_indices]
 

@@ -44,6 +44,10 @@ class InteractionEmbeddingRequest(BaseModel):
     )
     metadata: dict | None = Field(None, description="추가 메타데이터")
 
+    # === Quality Metadata ===
+    validity: str | None = Field(None, description="VALID, OFF_TOPIC, REFUSAL, etc.")
+    quality: str | None = Field(None, description="FULL, GROUNDED, FLOATING, EMPTY")
+
 
 class InteractionEmbeddingResponse(BaseModel):
     """임베딩 응답 DTO (AI -> Server)"""
