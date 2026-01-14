@@ -103,7 +103,7 @@ jobs:
               "echo \"MAX_TOKENS=${{ secrets.DEV_MAX_TOKENS }}\" >> /tmp/fastapi-ai/.env",
               "echo \"TOP_P=${{ secrets.DEV_TOP_P }}\" >> /tmp/fastapi-ai/.env",
               "chmod 600 /tmp/fastapi-ai/.env",
-              "docker run -d --name fastapi-dev-app --restart unless-stopped -p 8000:8000 --env-file /tmp/fastapi-ai/.env ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}:develop-latest",
+              "docker run -d --name fastapi-dev-app --restart unless-stopped -p 8000:8000 --env-file /tmp/fastapi-ai/.env -v /home/ubuntu/chroma_data:/app/chroma_data ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}:develop-latest",
               "echo \"Waiting for application to start...\"",
               "sleep 60",
               "curl -f http://localhost:8000/health || exit 1",
