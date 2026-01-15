@@ -1,0 +1,64 @@
+"""설문 상호작용 시뮬레이션 테스트
+
+이 테스트는 InteractionService의 동작을 검증합니다.
+pytest로 실행하거나 직접 스크립트로 실행할 수 있습니다.
+"""
+
+from app.schemas.survey import SurveyInteractionRequest
+from app.services.bedrock_service import BedrockService
+from app.services.interaction_service import InteractionService
+
+
+def main():
+    print("--- Simulating Initial Interaction ---")
+
+    # 1. Define initial values
+    session_id = "simulation-test-001"
+    current_question = "What is your favorite game genre?"
+    user_answer = (
+        "I love RPGs because of the deep storytelling and character development."
+    )
+
+    print(f"Session ID: {session_id}")
+    print(f"Current Question: {current_question}")
+    print(f"User Answer: {user_answer}")
+
+    # 2. Create Request Object
+    request = SurveyInteractionRequest(
+        session_id=session_id,
+        current_question=current_question,
+        user_answer=user_answer,
+        game_info={
+            "game_name": "Epic Fantasy RPG",
+            "game_genre": "RPG",
+            "game_context": "판타지 세계관의 정통 RPG. 던전 탐험과 퀘스트 중심.",
+        },
+        conversation_history=[
+            {
+                "question": "게임의 전투 시스템이 재미있었나요?",
+                "answer": "네, 스킬 조합이 다양해서 전략적으로 즐길 수 있었어요.",
+            }
+        ],
+    )
+
+    print("\nProcessing request...")
+
+    # 3. Create service instances and process interaction
+    try:
+        bedrock_service = BedrockService()
+        interaction_service = InteractionService(bedrock_service)
+
+        response = interaction_service.process_interaction(request)
+        print("\n--- Interaction Result ---")
+        print(f"Action: {response.action}")
+        print(f"Message (Tail Question): {response.message}")
+        print(f"Analysis: {response.analysis}")
+    except Exception as e:
+        print(f"\nError details: {e}")
+        import traceback
+
+        traceback.print_exc()
+
+
+if __name__ == "__main__":
+    main()

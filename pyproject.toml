@@ -1,0 +1,111 @@
+[project]
+name = "ai"
+version = "0.1.0"
+description = "PlayProbie AI Engine"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "fastapi>=0.127.1",
+    "pydantic-settings>=2.12.0",
+    "uvicorn[standard]>=0.40.0",
+    "boto3>=1.42.14",
+    "langgraph>=1.0.5",
+    "langchain-aws>=1.1.0",
+    "chromadb>=1.3.7",
+    "scikit-learn>=1.8.0",
+    "bertopic>=0.16.0",
+    "hdbscan>=0.8.38",
+    "umap-learn>=0.5.7",
+    "kiwipiepy>=0.22.1",
+]
+
+[tool.uv.sources]
+torch = [
+  { index = "pytorch-cpu", marker = "sys_platform == 'linux'" },
+]
+torchvision = [
+  { index = "pytorch-cpu", marker = "sys_platform == 'linux'" },
+]
+torchaudio = [
+  { index = "pytorch-cpu", marker = "sys_platform == 'linux'" },
+]
+
+[[tool.uv.index]]
+name = "pytorch-cpu"
+url = "https://download.pytorch.org/whl/cpu"
+explicit = true
+
+[dependency-groups]
+dev = [
+    "pytest>=9.0.2",
+    "pytest-asyncio>=0.24.0",
+    "ruff>=0.14.10",
+    "httpx>=0.28.0",
+]
+
+# ============================================
+# Ruff Configuration (Linter + Formatter)
+# ============================================
+
+[tool.ruff]
+# Python 버전 타겟
+target-version = "py312"
+
+# 라인 길이 (Black 호환)
+line-length = 88
+
+# 제외 디렉토리
+exclude = [
+    ".git",
+    ".venv",
+    "__pycache__",
+    ".mypy_cache",
+    ".pytest_cache",
+]
+
+[tool.ruff.lint]
+# 활성화할 규칙 그룹
+select = [
+    "E",      # pycodestyle errors
+    "W",      # pycodestyle warnings
+    "F",      # Pyflakes
+    "I",      # isort (import 정렬)
+    "B",      # flake8-bugbear (버그 방지)
+    "C4",     # flake8-comprehensions
+    "UP",     # pyupgrade (최신 Python 문법)
+]
+
+# 무시할 규칙
+ignore = [
+    "E501",   # 라인 길이 (formatter가 처리)
+    "B008",   # FastAPI Depends() 패턴 허용
+]
+
+# 자동 수정 가능 규칙
+fixable = ["ALL"]
+
+[tool.ruff.lint.isort]
+# import 정렬 설정
+known-first-party = ["app"]
+
+[tool.ruff.format]
+# 포맷터 설정 (Black 호환)
+quote-style = "double"
+indent-style = "space"
+skip-magic-trailing-comma = false
+line-ending = "auto"
+
+# ============================================
+# Pytest Configuration
+# ============================================
+
+[tool.pytest.ini_options]
+# Python 경로 설정 (app 모듈 import 가능하게)
+pythonpath = ["."]
+# 테스트 디렉토리
+testpaths = ["tests"]
+
+[tool.pytest_asyncio]
+mode = "auto"
+default_fixture_loop_scope = "function"
+
