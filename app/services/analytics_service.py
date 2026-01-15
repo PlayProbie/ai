@@ -87,45 +87,76 @@ class AnalyticsService:
     # Step 1: Data Loading
     # =========================================================================
 
+    # =========================================================================
+    # Step 1: Data Loading
+    # =========================================================================
+
     def _query_answers_from_chromadb(
-        self, fixed_question_id: int, survey_uuid: str, filter_invalid: bool = True
+        self, fixed_question_id: int, survey_uuid: str, filters: dict[str, str] | None
     ) -> dict:
-        """ChromaDB에서 특정 질문에 대한 답변들 + 임베딩 조회"""
+        """ChromaDB에서 특정 질문에 대한 답변들 + 임베딩 조회 (하이브리드 필터링 적용)"""
         try:
-            # ChromaDB 버전 호환성을 위해 단일 조건으로 조회 후 Python에서 필터링
-            # $and 연산자가 일부 버전에서 문제를 일으킬 수 있음
-            # TODO: ChromaDB 버전 업그레이드 후 $and 연산자 사용
+            # 1. ChromaDB Where 절 생성 (Meta-filtering)
+            # 기본 조건: fixed_question_id
+            where_conditions = [{"fixed_question_id": fixed_question_id}]
+
+            # 추가 필터 적용 (gender, age_group은 ChromaDB에서 직접 필터링)
+            if filters:
+                if "gender" in filters and filters["gender"]:
+                    where_conditions.append({"gender": filters["gender"]})
+                if "age_group" in filters and filters["age_group"]:
+                    where_conditions.append({"age_group": filters["age_group"]})
+
+            # ChromaDB where 절 생성 (단일 조건 vs 복수 조건)
+            if len(where_conditions) == 1:
+                where_clause = where_conditions[0]
+            else:
+                where_clause = {"$and": where_conditions}
+
+            # 2. ChromaDB 조회
             results = self.embedding_service.collection.get(
-                where={"fixed_question_id": fixed_question_id},
+                where=where_clause,
                 include=["documents", "metadatas", "embeddings"],
             )
 
             if not results["ids"]:
                 logger.warning(
-                    f"⚠️ 답변 없음: question_id={fixed_question_id}, survey_uuid={survey_uuid}"
+                    f"⚠️ 답변 없음 (ChromaDB 필터 후): question_id={fixed_question_id}, filters={filters}"
                 )
                 return {"ids": [], "documents": [], "metadatas": [], "embeddings": []}
 
-            # survey_uuid + Validity 필터링 (Python에서 처리)
+            # 3. Python 레벨 후처리 필터링 (In-memory filtering)
+            # - survey_uuid: 필수 필터
+            # - prefer_genre: 부분 일치 (contains) 필터
             filtered_indices = []
+
+            target_genre = filters.get("prefer_genre") if filters else None
+
             for i, meta in enumerate(results["metadatas"]):
+                # survey_uuid 체크
                 if meta.get("survey_uuid") != survey_uuid:
                     continue
 
-                # === 신규: Validity 필터링 ===
-                if filter_invalid:
-                    validity = meta.get("validity")
-                    if validity in ["OFF_TOPIC", "REFUSAL", "UNINTELLIGIBLE"]:
-                        logger.debug(
-                            f"🚫 Filtered out document {i} due to validity={validity}"
-                        )
+                # prefer_genre 체크 (있을 경우만)
+                if target_genre:
+                    # 메타데이터에 prefer_genre가 없거나, 타겟 장르가 포함되지 않으면 제외
+                    user_genre = meta.get("prefer_genre", "")
+                    if not user_genre or target_genre not in user_genre:
                         continue
+
+                # === Validity 필터링 (항상 적용) ===
+                validity = meta.get("validity")
+                if validity in ["OFF_TOPIC", "REFUSAL", "UNINTELLIGIBLE"]:
+                    logger.debug(
+                        f"🚫 Filtered out document {i} due to validity={validity}"
+                    )
+                    continue
 
                 filtered_indices.append(i)
 
             if not filtered_indices:
                 logger.warning(
-                    f"⚠️ survey_uuid 필터 후 답변 없음: question_id={fixed_question_id}, survey_uuid={survey_uuid}"
+                    f"⚠️ 답변 없음 (Python 필터 후): survey_uuid={survey_uuid}, genre_filter={target_genre}"
                 )
                 return {"ids": [], "documents": [], "metadatas": [], "embeddings": []}
 
@@ -136,7 +167,9 @@ class AnalyticsService:
                 "embeddings": [results["embeddings"][i] for i in filtered_indices],
             }
 
-            logger.info(f"✅ ChromaDB 조회 완료: {len(filtered_results['ids'])}개 답변")
+            logger.info(
+                f"✅ ChromaDB 조회 및 필터링 완료: {len(filtered_results['ids'])}개 답변"
+            )
             return filtered_results
 
         except Exception as error:
@@ -600,7 +633,7 @@ class AnalyticsService:
 
             # Step 2: ChromaDB 조회
             results = self._query_answers_from_chromadb(
-                request.fixed_question_id, request.survey_uuid
+                request.fixed_question_id, request.survey_uuid, request.filters
             )
             total_count = len(results["ids"])
 
