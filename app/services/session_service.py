@@ -31,7 +31,6 @@ GREETING_PROMPT = """당신은 게임 플레이테스트 인터뷰어입니다.
 
 # 정보
 - 게임 이름: {game_name}
-- 게임 장르: {game_genre}
 - 게임 설명: {game_context}
 - 테스트 단계: {test_phase}
 - 목표 테마: {target_theme}
