@@ -115,3 +115,17 @@ class QuestionAnalysisRequest(BaseModel):
 
     survey_uuid: str = Field(..., description="설문 UUID (String)")
     fixed_question_id: int = Field(..., description="고정 질문 ID (Long)")
+
+
+class SurveySummaryRequest(BaseModel):
+    """설문 종합 평가 요청"""
+
+    question_summaries: list[str] = Field(
+        ..., description="각 질문별 meta_summary 리스트"
+    )
+
+
+class SurveySummaryResponse(BaseModel):
+    """설문 종합 평가 응답"""
+
+    survey_summary: str = Field(..., description="설문 전체 종합 평가 (1~2문장)")

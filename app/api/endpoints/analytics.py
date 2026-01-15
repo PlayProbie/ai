@@ -3,7 +3,11 @@
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import StreamingResponse
 
-from app.schemas.analytics import QuestionAnalysisRequest
+from app.schemas.analytics import (
+    QuestionAnalysisRequest,
+    SurveySummaryRequest,
+    SurveySummaryResponse,
+)
 from app.services.analytics_service import AnalyticsService
 
 router = APIRouter()
@@ -37,3 +41,17 @@ async def analyze_question(
             "X-Accel-Buffering": "no",
         },
     )
+
+
+@router.post("/survey/summary", response_model=SurveySummaryResponse)
+async def generate_survey_summary(
+    request: SurveySummaryRequest,
+    service: AnalyticsService = Depends(get_analytics_service),
+):
+    """
+    설문 종합 평가 생성
+
+    - 각 질문별 meta_summary를 종합하여 1~2줄 평가 생성
+    """
+    summary = await service.generate_survey_summary(request.question_summaries)
+    return SurveySummaryResponse(survey_summary=summary)

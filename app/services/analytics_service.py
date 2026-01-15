@@ -26,6 +26,7 @@ from app.core.analytics_prompts import (
     META_SUMMARY_PROMPT,
     OUTLIER_ANALYSIS_PROMPT,
     SENTIMENT_ANALYSIS_PROMPT,
+    SURVEY_SUMMARY_PROMPT,
 )
 from app.core.exceptions import AIGenerationException
 from app.core.retry_policy import bedrock_retry
@@ -465,6 +466,37 @@ class AnalyticsService:
 
         except Exception as error:
             logger.error(f"❌ 메타 요약 생성 실패: {error}")
+            return ""
+
+    # =========================================================================
+    # Step 9: Survey Summary
+    # =========================================================================
+
+    @bedrock_retry
+    async def generate_survey_summary(self, question_summaries: list[str]) -> str:
+        """각 질문별 요약을 종합하여 설문 전체 평가 생성"""
+        if not question_summaries:
+            return ""
+
+        try:
+            prompt = ChatPromptTemplate.from_messages(
+                [
+                    ("system", CLUSTER_ANALYSIS_SYSTEM_PROMPT),
+                    ("user", SURVEY_SUMMARY_PROMPT),
+                ]
+            )
+            chain = prompt | self.bedrock_service.chat_model
+            summaries_text = "\n".join(
+                [f"- Q{i + 1}: {s}" for i, s in enumerate(question_summaries)]
+            )
+
+            response = await chain.ainvoke({"question_summaries": summaries_text})
+
+            result = self._parse_llm_json(response.content)
+            return result.get("survey_summary", "")
+
+        except Exception as error:
+            logger.error(f"❌ 설문 종합 평가 생성 실패: {error}")
             return ""
 
     def _parse_llm_json(self, content) -> dict:
