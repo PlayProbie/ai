@@ -196,6 +196,7 @@ ELEMENT_DEFINITIONS = {
 
 GENRE_ELEMENT_MAPPING = {
     "_common": {"required": ["core_mechanic", "player_goal"], "optional": []},
+    # 한글 장르명
     "액션": {"required": ["combat_system"], "optional": ["control_scheme"]},
     "어드벤처": {
         "required": ["narrative"],
@@ -220,6 +221,30 @@ GENRE_ELEMENT_MAPPING = {
     "리듬": {"required": ["rhythm_system"], "optional": ["music_genre", "input_method"]},
     "대전": {"required": ["fighting_system"], "optional": ["character_roster"]},
     "캐주얼": {"required": [], "optional": ["session_length"]},
+    # 영어 장르명 (대문자)
+    "ACTION": {"required": ["combat_system"], "optional": ["control_scheme"]},
+    "ADVENTURE": {
+        "required": ["narrative"],
+        "optional": ["main_character", "exploration_element"],
+    },
+    "SIMULATION": {"required": ["simulation_target"], "optional": ["management_element"]},
+    "PUZZLE": {"required": ["puzzle_mechanic"], "optional": []},
+    "STRATEGY": {"required": ["decision_type"], "optional": ["resource_system"]},
+    "ARCADE": {"required": ["score_system"], "optional": ["difficulty_curve"]},
+    "HORROR": {"required": ["horror_element"], "optional": ["atmosphere", "narrative"]},
+    "SHOOTING": {"required": ["shooting_mechanic"], "optional": ["weapon_variety"]},
+    "VISUAL_NOVEL": {
+        "required": ["narrative", "main_character"],
+        "optional": ["choice_system"],
+    },
+    "ROGUELIKE": {
+        "required": ["run_structure", "permanent_progression"],
+        "optional": ["randomness_element"],
+    },
+    "SPORTS": {"required": ["sport_type", "play_mode"], "optional": []},
+    "RHYTHM": {"required": ["rhythm_system"], "optional": ["music_genre", "input_method"]},
+    "FIGHTING": {"required": ["fighting_system"], "optional": ["character_roster"]},
+    "CASUAL": {"required": [], "optional": ["session_length"]},
 }
 
 
