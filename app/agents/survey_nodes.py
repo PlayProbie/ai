@@ -214,6 +214,12 @@ class SurveyNodes:
     async def generate_probe(self, state: SurveyState) -> dict:
         """DICE 프로브 질문 생성"""
         quality = state.get("quality", QualityType.EMPTY)
+        current_question = state["current_question"]
+        user_answer = state["user_answer"]
+
+        # 🔍 디버그 로깅: 실제 전달되는 값 확인
+        logger.info(f"🔍 [probe] current_question: {current_question}")
+        logger.info(f"🔍 [probe] user_answer: {user_answer}")
 
         # 품질 → 프로브 유형 매핑
         probe_map = {
