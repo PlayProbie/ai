@@ -220,7 +220,10 @@ class AnalyticsService:
     ) -> tuple[dict[int, list[int]], list[int]]:
         """HDBSCAN으로 밀도 기반 클러스터링 (노이즈 자동 분리)"""
         n_samples = len(embeddings)
-        min_cluster_size = max(2, min(self.MIN_CLUSTER_SIZE, n_samples // 2))
+        if n_samples > 50:
+            min_cluster_size = max(2, n_samples // 7)
+        else:
+            min_cluster_size = max(2, min(self.MIN_CLUSTER_SIZE, n_samples // 2))
 
         if n_samples < 20:
             min_samples = 1
