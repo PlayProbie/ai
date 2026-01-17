@@ -4,12 +4,13 @@ FastAPI Dependency Injection을 위한 의존성 팩토리 모듈
 
 from typing import Annotated
 
-from fastapi import Depends, Request
+from fastapi import Depends, HTTPException, Request
 
 from app.services.bedrock_service import BedrockService
 from app.services.embedding_service import EmbeddingService
 from app.services.game_element_service import GameElementService
 from app.services.interaction_service import InteractionService
+from app.services.question_service import QuestionService
 from app.services.session_service import SessionService
 from app.services.validity_service import ValidityService
 
@@ -54,3 +55,11 @@ SessionServiceDep = Annotated[SessionService, Depends(get_session_service)]
 GameElementServiceDep = Annotated[GameElementService, Depends(get_game_element_service)]
 
 
+async def get_question_service(request: Request) -> QuestionService:
+    """lifespan에서 초기화된 QuestionService를 app.state에서 가져옴"""
+    if not request.app.state.question_service:
+        raise HTTPException(status_code=503, detail="질문 추천 서비스 미초기화")
+    return request.app.state.question_service
+
+
+QuestionServiceDep = Annotated[QuestionService, Depends(get_question_service)]
