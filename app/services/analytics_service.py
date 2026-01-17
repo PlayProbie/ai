@@ -183,22 +183,33 @@ class AnalyticsService:
     def _reduce_dimensions(self, embeddings: np.ndarray) -> np.ndarray:
         """UMAP으로 고차원 임베딩을 저차원으로 축소"""
         n_samples = len(embeddings)
-        if n_samples < 5:
-            # 샘플이 너무 적으면 차원 축소 생략
+
+        # 샘플이 너무 적으면 차원 축소 생략 (UMAP spectral layout 오류 방지)
+        # k >= N 오류를 피하기 위해 최소 10개 이상 필요
+        if n_samples < 10:
+            logger.info(f"⏭️ 샘플 수 부족으로 UMAP 생략: {n_samples}개")
             return embeddings
 
         n_neighbors = min(15, n_samples - 1)
-        n_components = min(5, n_samples - 1)
+        # n_components는 n_samples보다 훨씬 작아야 함 (spectral layout 안정성)
+        n_components = min(5, max(2, n_samples // 3))
 
-        umap_model = UMAP(
-            n_neighbors=n_neighbors,
-            n_components=n_components,
-            min_dist=0.0,
-            metric="cosine",
-        )
-        reduced = umap_model.fit_transform(embeddings)
-        logger.info(f"✅ UMAP 차원 축소: {embeddings.shape[1]}d → {reduced.shape[1]}d")
-        return reduced
+        try:
+            umap_model = UMAP(
+                n_neighbors=n_neighbors,
+                n_components=n_components,
+                min_dist=0.0,
+                metric="cosine",
+                init="random",  # spectral 대신 random으로 안전하게
+            )
+            reduced = umap_model.fit_transform(embeddings)
+            logger.info(
+                f"✅ UMAP 차원 축소: {embeddings.shape[1]}d → {reduced.shape[1]}d"
+            )
+            return reduced
+        except Exception as e:
+            logger.warning(f"⚠️ UMAP 차원 축소 실패, 원본 사용: {e}")
+            return embeddings
 
     # =========================================================================
     # Step 3: HDBSCAN Clustering
@@ -637,8 +648,26 @@ class AnalyticsService:
             )
             total_count = len(results["ids"])
 
-            if total_count == 0:
-                yield f"event: error\ndata: {json.dumps({'message': '분석할 답변이 없습니다.'})}\n\n"
+            # 데이터 부족 시 빈 clusters로 done 이벤트 반환 (Spring에서 INSUFFICIENT_DATA로 처리)
+            if total_count == 0 or total_count < self.MIN_CLUSTER_SIZE:
+                logger.warning(
+                    f"⚠️ 데이터 부족으로 빈 분석 결과 반환: count={total_count}, min={self.MIN_CLUSTER_SIZE}"
+                )
+                empty_output = QuestionAnalysisOutput(
+                    question_id=question_id,
+                    total_answers=total_count,
+                    clusters=[],  # 빈 클러스터 → Spring에서 INSUFFICIENT_DATA로 판단
+                    sentiment=SentimentStats(
+                        score=0,
+                        label="분석 불가",
+                        distribution=SentimentDistribution(
+                            positive=0, neutral=0, negative=0
+                        ),
+                    ),
+                    outliers=None,
+                    meta_summary=None,
+                )
+                yield f"event: done\ndata: {empty_output.model_dump_json()}\n\n"
                 return
 
             yield f"event: progress\ndata: {json.dumps({'step': 'loaded', 'progress': 20, 'answer_count': total_count})}\n\n"
