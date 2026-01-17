@@ -87,45 +87,76 @@ class AnalyticsService:
     # Step 1: Data Loading
     # =========================================================================
 
+    # =========================================================================
+    # Step 1: Data Loading
+    # =========================================================================
+
     def _query_answers_from_chromadb(
-        self, fixed_question_id: int, survey_uuid: str, filter_invalid: bool = True
+        self, fixed_question_id: int, survey_uuid: str, filters: dict[str, str] | None
     ) -> dict:
-        """ChromaDB에서 특정 질문에 대한 답변들 + 임베딩 조회"""
+        """ChromaDB에서 특정 질문에 대한 답변들 + 임베딩 조회 (하이브리드 필터링 적용)"""
         try:
-            # ChromaDB 버전 호환성을 위해 단일 조건으로 조회 후 Python에서 필터링
-            # $and 연산자가 일부 버전에서 문제를 일으킬 수 있음
-            # TODO: ChromaDB 버전 업그레이드 후 $and 연산자 사용
+            # 1. ChromaDB Where 절 생성 (Meta-filtering)
+            # 기본 조건: fixed_question_id
+            where_conditions = [{"fixed_question_id": fixed_question_id}]
+
+            # 추가 필터 적용 (gender, age_group은 ChromaDB에서 직접 필터링)
+            if filters:
+                if "gender" in filters and filters["gender"]:
+                    where_conditions.append({"gender": filters["gender"]})
+                if "age_group" in filters and filters["age_group"]:
+                    where_conditions.append({"age_group": filters["age_group"]})
+
+            # ChromaDB where 절 생성 (단일 조건 vs 복수 조건)
+            if len(where_conditions) == 1:
+                where_clause = where_conditions[0]
+            else:
+                where_clause = {"$and": where_conditions}
+
+            # 2. ChromaDB 조회
             results = self.embedding_service.collection.get(
-                where={"fixed_question_id": fixed_question_id},
+                where=where_clause,
                 include=["documents", "metadatas", "embeddings"],
             )
 
             if not results["ids"]:
                 logger.warning(
-                    f"⚠️ 답변 없음: question_id={fixed_question_id}, survey_uuid={survey_uuid}"
+                    f"⚠️ 답변 없음 (ChromaDB 필터 후): question_id={fixed_question_id}, filters={filters}"
                 )
                 return {"ids": [], "documents": [], "metadatas": [], "embeddings": []}
 
-            # survey_uuid + Validity 필터링 (Python에서 처리)
+            # 3. Python 레벨 후처리 필터링 (In-memory filtering)
+            # - survey_uuid: 필수 필터
+            # - prefer_genre: 부분 일치 (contains) 필터
             filtered_indices = []
+
+            target_genre = filters.get("prefer_genre") if filters else None
+
             for i, meta in enumerate(results["metadatas"]):
+                # survey_uuid 체크
                 if meta.get("survey_uuid") != survey_uuid:
                     continue
 
-                # === 신규: Validity 필터링 ===
-                if filter_invalid:
-                    validity = meta.get("validity")
-                    if validity in ["OFF_TOPIC", "REFUSAL", "UNINTELLIGIBLE"]:
-                        logger.debug(
-                            f"🚫 Filtered out document {i} due to validity={validity}"
-                        )
+                # prefer_genre 체크 (있을 경우만)
+                if target_genre:
+                    # 메타데이터에 prefer_genre가 없거나, 타겟 장르가 포함되지 않으면 제외
+                    user_genre = meta.get("prefer_genre", "")
+                    if not user_genre or target_genre not in user_genre:
                         continue
+
+                # === Validity 필터링 (항상 적용) ===
+                validity = meta.get("validity")
+                if validity in ["OFF_TOPIC", "REFUSAL", "UNINTELLIGIBLE"]:
+                    logger.debug(
+                        f"🚫 Filtered out document {i} due to validity={validity}"
+                    )
+                    continue
 
                 filtered_indices.append(i)
 
             if not filtered_indices:
                 logger.warning(
-                    f"⚠️ survey_uuid 필터 후 답변 없음: question_id={fixed_question_id}, survey_uuid={survey_uuid}"
+                    f"⚠️ 답변 없음 (Python 필터 후): survey_uuid={survey_uuid}, genre_filter={target_genre}"
                 )
                 return {"ids": [], "documents": [], "metadatas": [], "embeddings": []}
 
@@ -136,7 +167,9 @@ class AnalyticsService:
                 "embeddings": [results["embeddings"][i] for i in filtered_indices],
             }
 
-            logger.info(f"✅ ChromaDB 조회 완료: {len(filtered_results['ids'])}개 답변")
+            logger.info(
+                f"✅ ChromaDB 조회 및 필터링 완료: {len(filtered_results['ids'])}개 답변"
+            )
             return filtered_results
 
         except Exception as error:
@@ -150,22 +183,33 @@ class AnalyticsService:
     def _reduce_dimensions(self, embeddings: np.ndarray) -> np.ndarray:
         """UMAP으로 고차원 임베딩을 저차원으로 축소"""
         n_samples = len(embeddings)
-        if n_samples < 5:
-            # 샘플이 너무 적으면 차원 축소 생략
+
+        # 샘플이 너무 적으면 차원 축소 생략 (UMAP spectral layout 오류 방지)
+        # k >= N 오류를 피하기 위해 최소 10개 이상 필요
+        if n_samples < 10:
+            logger.info(f"⏭️ 샘플 수 부족으로 UMAP 생략: {n_samples}개")
             return embeddings
 
         n_neighbors = min(15, n_samples - 1)
-        n_components = min(5, n_samples - 1)
+        # n_components는 n_samples보다 훨씬 작아야 함 (spectral layout 안정성)
+        n_components = min(5, max(2, n_samples // 3))
 
-        umap_model = UMAP(
-            n_neighbors=n_neighbors,
-            n_components=n_components,
-            min_dist=0.0,
-            metric="cosine",
-        )
-        reduced = umap_model.fit_transform(embeddings)
-        logger.info(f"✅ UMAP 차원 축소: {embeddings.shape[1]}d → {reduced.shape[1]}d")
-        return reduced
+        try:
+            umap_model = UMAP(
+                n_neighbors=n_neighbors,
+                n_components=n_components,
+                min_dist=0.0,
+                metric="cosine",
+                init="random",  # spectral 대신 random으로 안전하게
+            )
+            reduced = umap_model.fit_transform(embeddings)
+            logger.info(
+                f"✅ UMAP 차원 축소: {embeddings.shape[1]}d → {reduced.shape[1]}d"
+            )
+            return reduced
+        except Exception as e:
+            logger.warning(f"⚠️ UMAP 차원 축소 실패, 원본 사용: {e}")
+            return embeddings
 
     # =========================================================================
     # Step 3: HDBSCAN Clustering
@@ -176,7 +220,10 @@ class AnalyticsService:
     ) -> tuple[dict[int, list[int]], list[int]]:
         """HDBSCAN으로 밀도 기반 클러스터링 (노이즈 자동 분리)"""
         n_samples = len(embeddings)
-        min_cluster_size = max(2, min(self.MIN_CLUSTER_SIZE, n_samples // 2))
+        if n_samples > 50:
+            min_cluster_size = max(2, n_samples // 7)
+        else:
+            min_cluster_size = max(2, min(self.MIN_CLUSTER_SIZE, n_samples // 2))
 
         if n_samples < 20:
             min_samples = 1
@@ -600,12 +647,30 @@ class AnalyticsService:
 
             # Step 2: ChromaDB 조회
             results = self._query_answers_from_chromadb(
-                request.fixed_question_id, request.survey_uuid
+                request.fixed_question_id, request.survey_uuid, request.filters
             )
             total_count = len(results["ids"])
 
-            if total_count == 0:
-                yield f"event: error\ndata: {json.dumps({'message': '분석할 답변이 없습니다.'})}\n\n"
+            # 데이터 부족 시 빈 clusters로 done 이벤트 반환 (Spring에서 INSUFFICIENT_DATA로 처리)
+            if total_count == 0 or total_count < self.MIN_CLUSTER_SIZE:
+                logger.warning(
+                    f"⚠️ 데이터 부족으로 빈 분석 결과 반환: count={total_count}, min={self.MIN_CLUSTER_SIZE}"
+                )
+                empty_output = QuestionAnalysisOutput(
+                    question_id=question_id,
+                    total_answers=total_count,
+                    clusters=[],  # 빈 클러스터 → Spring에서 INSUFFICIENT_DATA로 판단
+                    sentiment=SentimentStats(
+                        score=0,
+                        label="분석 불가",
+                        distribution=SentimentDistribution(
+                            positive=0, neutral=0, negative=0
+                        ),
+                    ),
+                    outliers=None,
+                    meta_summary=None,
+                )
+                yield f"event: done\ndata: {empty_output.model_dump_json()}\n\n"
                 return
 
             yield f"event: progress\ndata: {json.dumps({'step': 'loaded', 'progress': 20, 'answer_count': total_count})}\n\n"

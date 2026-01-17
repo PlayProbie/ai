@@ -116,6 +116,11 @@ class QuestionAnalysisRequest(BaseModel):
     survey_uuid: str = Field(..., description="설문 UUID (String)")
     fixed_question_id: int = Field(..., description="고정 질문 ID (Long)")
 
+    filters: dict[str, str] | None = Field(
+        default=None,
+        description="메타데이터 필터 조건 (예: {'gender': 'MALE', 'age_group': '20s', 'prefer_genre': 'RPG'})",
+    )
+
 
 class SurveySummaryRequest(BaseModel):
     """설문 종합 평가 요청"""
