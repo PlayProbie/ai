@@ -35,6 +35,9 @@ class Settings(BaseSettings):
     CHROMA_PERSIST_DIR: str = "./chroma_data"
     CHROMA_COLLECTION_NAME: str = "interactions"
 
+    # Spring 서버 URL (질문 뱅크 동기화용)
+    SPRING_SERVER_URL: str = "http://localhost:8080"
+
     model_config = SettingsConfigDict(
         # .env 파일 위치 지정 (없어도 에러 안남)
         env_file=".env",

@@ -8,12 +8,15 @@ from fastapi import FastAPI, Request
 from app.api.router import api_router
 from app.core.config import settings
 from app.core.exceptions import AIException, ai_exception_handler
+from app.core.question_collection import QuestionCollection
 from app.services.analytics_service import AnalyticsService
 from app.services.bedrock_service import BedrockService
 from app.services.embedding_service import EmbeddingService
 from app.services.game_element_service import GameElementService
 from app.services.interaction_service import InteractionService
+from app.services.question_service import QuestionService
 from app.services.session_service import SessionService
+from app.services.sync_service import QuestionSyncService
 
 # 로깅 설정 - uvicorn과 함께 동작하도록
 logging.basicConfig(
@@ -47,6 +50,29 @@ async def lifespan(app: FastAPI):
     app.state.analytics_service = AnalyticsService(
         app.state.embedding_service, app.state.bedrock_service
     )
+
+    # 질문 추천 서비스 초기화 (실패해도 서버는 시작됨)
+    try:
+        app.state.question_collection = QuestionCollection()
+        app.state.sync_service = QuestionSyncService(app.state.question_collection)
+        app.state.question_service = QuestionService(
+            app.state.question_collection
+        )
+        logger.info("✅ 질문 추천 서비스 초기화 완료")
+    except Exception as e:
+        logger.error(f"❌ 질문 추천 서비스 초기화 실패: {e}")
+        app.state.question_collection = None
+        app.state.sync_service = None
+        app.state.question_service = None
+
+    # 시작 시 동기화 시도 (실패해도 서버는 뜸)
+    if app.state.question_collection and app.state.question_collection.collection.count() == 0:
+        try:
+            await app.state.sync_service.full_sync()
+            logger.info("✅ 질문 뱅크 초기 동기화 완료")
+        except Exception as e:
+            logger.warning(f"⚠️ 초기 동기화 실패 (Spring 서버 연결 확인 필요): {e}")
+            logger.warning("ℹ️ 수동 동기화: POST /api/admin/questions/sync?full=true")
 
     yield  # 서버 작동 중...
 

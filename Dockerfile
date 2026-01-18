@@ -36,15 +36,20 @@ COPY --from=builder --chown=appuser:appuser /app/.venv /app/.venv
 # Copy application code
 COPY --chown=appuser:appuser . .
 
-# Create ChromaDB data directory with correct permissions
-RUN mkdir -p /app/chroma_data && chown -R appuser:appuser /app/chroma_data
+# Generate seed data from SQL
+RUN python convert_sql.py
+
+# Create ChromaDB data directory and cache directories with correct permissions
+RUN mkdir -p /app/chroma_data /app/.cache/huggingface && chown -R appuser:appuser /app
+
+# Environment variables
+ENV PATH="/app/.venv/bin:$PATH"
+ENV HOME="/app"
+ENV TRANSFORMERS_CACHE="/app/.cache/huggingface"
+ENV HF_HOME="/app/.cache/huggingface"
 
 # Switch to non-root user
 USER appuser
-
-# Environment variables
-# Make sure we use the virtual environment's python and binaries
-ENV PATH="/app/.venv/bin:$PATH"
 
 # Expose port
 EXPOSE 8000
