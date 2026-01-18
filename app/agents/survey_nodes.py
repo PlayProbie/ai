@@ -149,7 +149,7 @@ class SurveyNodes:
     async def _generate_redirect_message(self, state: SurveyState) -> str:
         """OFF_TOPIC 재질문 생성"""
         question = state["current_question"]
-        return f"그 부분도 좋은 의견이네요! 혹시 원래 질문으로 돌아가서, {question.rstrip('?')}에 대해서는 어떻게 생각하세요?"
+        return f"그 부분도 좋은 의견이네요! 혹시 원래 질문에 답해주시겠어요?"
 
     async def _generate_clarify_message(self, state: SurveyState, validity: ValidityType) -> str:
         """AMBIGUOUS/CONTRADICTORY 명확화 질문"""
