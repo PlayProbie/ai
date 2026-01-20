@@ -174,22 +174,30 @@ class InteractionService:
 
     def _map_node_to_sse_event(self, node_name: str, output: dict, final_state: dict) -> str | None:
         """노드 완료 시 SSE 이벤트 매핑"""
-        if node_name == "validate" and output.get("validity"):
-            return self._sse_event("validity_result", {
-                "validity": output["validity"].value,
-                "confidence": output.get("validity_confidence", 0),
-                "reason": output.get("validity_reason", ""),
-                "source": output.get("validity_source", ""),
-            })
+        # [NEW] 병렬 실행 노드 처리 -> 기존 이벤트 2개 분리 전송
+        if node_name == "evaluate_parallel":
+            events = []
 
-        if node_name == "evaluate_quality" and output.get("quality"):
-            return self._sse_event("quality_result", {
-                "quality": output["quality"].value,
-                "thickness": output.get("thickness"),
-                "thickness_evidence": output.get("thickness_evidence", []),
-                "richness": output.get("richness"),
-                "richness_evidence": output.get("richness_evidence", []),
-            })
+            # 1. Validity Result
+            if output.get("validity"):
+                events.append(self._sse_event("validity_result", {
+                    "validity": output["validity"].value,
+                    "confidence": output.get("validity_confidence", 0),
+                    "reason": output.get("validity_reason", ""),
+                    "source": output.get("validity_source", ""),
+                }))
+
+            # 2. Quality Result
+            if output.get("quality"):
+                events.append(self._sse_event("quality_result", {
+                    "quality": output["quality"].value,
+                    "thickness": output.get("thickness"),
+                    "thickness_evidence": output.get("thickness_evidence", []),
+                    "richness": output.get("richness"),
+                    "richness_evidence": output.get("richness_evidence", []),
+                }))
+
+            return "".join(events) if events else None
 
         if node_name in ["pass_to_next", "generate_probe", "generate_retry"]:
             action = output.get("action", SurveyAction.PASS_TO_NEXT)

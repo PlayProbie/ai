@@ -41,19 +41,29 @@ class SurveyNodes:
         """응답 유효성 평가"""
         logger.info(f"🔍 [validate] 유효성 평가 시작")
 
-        result = await self.validity_service.evaluate_validity(
-            answer=state["user_answer"],
-            current_question=state["current_question"],
-        )
+        try:
+            result = await self.validity_service.evaluate_validity(
+                answer=state["user_answer"],
+                current_question=state["current_question"],
+            )
 
-        logger.info(f"🔍 [validate] 결과: {result.validity.value}")
+            logger.info(f"🔍 [validate] 결과: {result.validity.value}")
 
-        return {
-            "validity": result.validity,
-            "validity_confidence": result.confidence,
-            "validity_reason": result.reason,
-            "validity_source": result.source,
-        }
+            return {
+                "validity": result.validity,
+                "validity_confidence": result.confidence,
+                "validity_reason": result.reason,
+                "validity_source": result.source,
+            }
+        except Exception as e:
+            logger.error(f"⚠️ [validate] 오류 발생: {e}")
+            # 에러 시 Fallback: AMBIGUOUS (재질문 유도)
+            return {
+                "validity": ValidityType.AMBIGUOUS,
+                "validity_confidence": 0.0,
+                "validity_reason": "Error during validation",
+                "validity_source": "system_fallback",
+            }
 
     # =========================================================================
     # 유효성 라우팅
@@ -166,25 +176,36 @@ class SurveyNodes:
         """응답 품질 평가 (Thickness × Richness)"""
         logger.info(f"📊 [quality] 품질 평가 시작")
 
-        game_context = ""
-        if state.get("game_info"):
-            game_context = state["game_info"].get("game_context", "")
+        try:
+            game_context = ""
+            if state.get("game_info"):
+                game_context = state["game_info"].get("game_context", "")
 
-        result = await self.quality_service.evaluate_quality(
-            answer=state["user_answer"],
-            current_question=state["current_question"],
-            game_context=game_context,
-        )
+            result = await self.quality_service.evaluate_quality(
+                answer=state["user_answer"],
+                current_question=state["current_question"],
+                game_context=game_context,
+            )
 
-        logger.info(f"📊 [quality] 결과: {result.quality.value}")
+            logger.info(f"📊 [quality] 결과: {result.quality.value}")
 
-        return {
-            "quality": result.quality,
-            "thickness": result.thickness,
-            "thickness_evidence": result.thickness_evidence,
-            "richness": result.richness,
-            "richness_evidence": result.richness_evidence,
-        }
+            return {
+                "quality": result.quality,
+                "thickness": result.thickness,
+                "thickness_evidence": result.thickness_evidence,
+                "richness": result.richness,
+                "richness_evidence": result.richness_evidence,
+            }
+        except Exception as e:
+            logger.error(f"⚠️ [quality] 오류 발생: {e}")
+            # 에러 시 Fallback: EMPTY (기본 탐색 질문 유도)
+            return {
+                "quality": QualityType.EMPTY,
+                "thickness": "LOW",
+                "richness": "LOW",
+                "thickness_evidence": [],
+                "richness_evidence": [],
+            }
 
     # =========================================================================
     # 품질 라우팅
@@ -202,6 +223,61 @@ class SurveyNodes:
             return "pass"
 
         # 품질 기반
+        if quality == QualityType.FULL:
+            return "pass"
+
+        return "probe"
+
+    # =========================================================================
+    # 통합 라우팅 & 병렬 실행
+    # =========================================================================
+
+    async def evaluate_parallel(self, state: SurveyState) -> dict:
+        """유효성 검사와 품질 평가 병렬 실행 (asyncio.gather)"""
+        import asyncio
+        logger.info(f"🚀 [parallel] 유효성 & 품질 평가 동시 실행")
+
+        # 두 태스크 동시 생성 및 실행
+        task1 = self.validate_answer(state)
+        task2 = self.evaluate_quality(state)
+
+        # 결과 대기 (병렬)
+        results = await asyncio.gather(task1, task2)
+
+        # 결과 병합
+        combined_result = {}
+        for res in results:
+            combined_result.update(res)
+
+        return combined_result
+
+    def route_combined(self, state: SurveyState) -> str:
+        """통합 라우팅 (유효성 + 품질 병렬 처리 후)"""
+        validity = state.get("validity", ValidityType.AMBIGUOUS)
+        quality = state.get("quality", QualityType.EMPTY)
+        retry_count = state.get("retry_count", 0)
+
+        # 1. 유효성 검사 실패 시 -> Retry 우선
+        if validity != ValidityType.VALID:
+             # REFUSAL은 바로 패스
+            if validity == ValidityType.REFUSAL:
+                return "pass"
+
+            # 재시도 횟수 초과 체크
+            if retry_count >= 1:
+                return "pass"
+
+            return "retry"
+
+        # 2. 유효성 통과 시 -> 품질 기반 라우팅
+        current_tails = state.get("current_tail_count", 0)
+        max_tails = state.get("max_tail_questions", 2)
+
+        # 강제 PASS 조건
+        if current_tails >= max_tails:
+            logger.info(f"🛑 [route] 꼬리질문 제한 도달")
+            return "pass"
+
         if quality == QualityType.FULL:
             return "pass"
 
