@@ -211,7 +211,7 @@ class SurveyNodes:
     # 프로브 생성 노드
     # =========================================================================
 
-    async def generate_probe(self, state: SurveyState) -> dict:
+    async def generate_probe(self, state: SurveyState, config=None) -> dict:
         """DICE 프로브 질문 생성 (astream_events에서 스트리밍 캡처)"""
         quality = state.get("quality", QualityType.EMPTY)
         current_question = state["current_question"]
@@ -239,18 +239,41 @@ class SurveyNodes:
         }
 
         from langchain_core.prompts import ChatPromptTemplate
+        from langchain_core.callbacks.manager import dispatch_custom_event
+
+        if config is None:
+            config = {}
+
         prompt = ChatPromptTemplate.from_template(prompt_map[probe_type])
-        # 핵심: chain에 이름을 부여하여 astream_events에서 식별 가능하게 함
         chain = (prompt | self.bedrock.chat_model).with_config({"run_name": "probe_llm"})
 
-        # ainvoke 사용 - astream_events가 LLM 토큰 스트리밍을 캡처함
-        response = await chain.ainvoke({
+        # astream 사용해 토큰 스트리밍 이벤트 발생 유도
+        full_response_text = ""
+        # config를 전달해야 상위 astream_events에 이벤트 전파됨
+        async for chunk in chain.astream({
             "current_question": current_question,
             "user_answer": user_answer,
-        })
+        }, config=config):
+            # 스트리밍 청크 누적 (ChatBedrockConverse chunk 처리 - 리스트/딕셔너리)
+            content = chunk.content
+            text_chunk = ""
 
-        # 응답에서 텍스트 추출
-        message = self._extract_response_content(response)
+            if isinstance(content, str):
+                text_chunk = content
+            elif isinstance(content, list):
+                for item in content:
+                    if isinstance(item, dict) and "text" in item:
+                        text_chunk += item["text"]
+                    elif isinstance(item, str):
+                        text_chunk += item
+
+            if text_chunk:
+                full_response_text += text_chunk
+                # 수동 이벤트 발생 (상위 InteractionService에서 감지)
+                dispatch_custom_event("probe_stream", {"content": text_chunk}, config=config)
+
+        # 응답 텍스트 설정
+        message = full_response_text.strip()
 
         return {
             "action": SurveyAction.TAIL_QUESTION,
