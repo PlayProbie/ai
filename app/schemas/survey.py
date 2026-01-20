@@ -35,6 +35,7 @@ class QuestionType(str, Enum):
     OPENING = "OPENING"
     FIXED = "FIXED"
     TAIL = "TAIL"
+    RETRY = "RETRY"
 
 
 class ValidityType(str, Enum):
