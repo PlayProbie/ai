@@ -60,8 +60,18 @@ class InteractionService:
                     if event_count <= 10:
                         logger.debug(f"📨 Event #{event_count}: kind={event_kind}, name={event_name}")
 
+                    # 0. 커스텀 스트리밍 이벤트 (수동 발생) - 가장 우선 순위
+                    if event_kind == "on_custom_event" and event_name == "probe_stream":
+                        chunk_content = event.get("data", {}).get("content", "")
+                        if chunk_content:
+                            message_buffer.append(chunk_content)
+                            yield self._sse_event("continue", {
+                                "content": chunk_content,
+                                "q_type": "TAIL"
+                            })
+
                     # LLM 스트리밍 시작 감지 (probe_llm 체인만 스트리밍)
-                    if event_kind == "on_chat_model_start":
+                    elif event_kind == "on_chat_model_start":
                         # probe_llm 체인만 클라이언트에 스트리밍 (structured output 노드 제외)
                         if event_name == "probe_llm" or "probe" in event_name.lower():
                             is_streaming_active = True
@@ -70,13 +80,17 @@ class InteractionService:
                         else:
                             logger.debug(f"🔇 LLM 스트리밍 스킵 (structured output): {event_name}")
 
-                    # LLM 토큰 스트리밍 (probe_llm만, tool_use 청크 제외)
+                    # LLM 토큰 스트리밍 (probe_llm만, tool_use 청크 제외 - 자동 감지용 백업)
                     elif event_kind == "on_chat_model_stream" and is_streaming_active:
                         chunk_content = self._extract_chunk_content(event)
                         # tool_use JSON 청크 필터링 (structured output 노이즈 방지)
                         if chunk_content and not chunk_content.strip().startswith("{"):
                             message_buffer.append(chunk_content)
-                            yield self._sse_event("continue", {"content": chunk_content})
+                            # Probe 생성은 항상 TAIL 타입
+                            yield self._sse_event("continue", {
+                                "content": chunk_content,
+                                "q_type": "TAIL"
+                            })
 
                     # LLM 스트리밍 종료
                     elif event_kind == "on_chat_model_end" and run_id == active_streaming_run_id:
@@ -105,7 +119,11 @@ class InteractionService:
                                 message = final_state.get("generated_message", "")
                                 if message:
                                     for char in message:
-                                        yield self._sse_event("continue", {"content": char})
+                                        # Retry 생성은 RETRY 타입 명시
+                                        yield self._sse_event("continue", {
+                                            "content": char,
+                                            "q_type": "RETRY"
+                                        })
 
                             complete_event = self._emit_message_complete(event_name, final_state, message_buffer)
                             if complete_event:
@@ -149,7 +167,7 @@ class InteractionService:
         content = chunk.content
         if isinstance(content, list):
             return "".join(
-                item.get("text", str(item)) if isinstance(item, dict) else str(item)
+                item.get("text", "") if isinstance(item, dict) else str(item) if isinstance(item, str) else ""
                 for item in content
             )
         return content if content else ""
