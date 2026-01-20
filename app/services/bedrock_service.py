@@ -12,6 +12,7 @@ from app.core.prompts import (
     GENERATE_TAIL_QUESTION_PROMPT,
     QUESTION_FEEDBACK_SYSTEM_PROMPT,
     QUESTION_GENERATION_SYSTEM_PROMPT,
+    QUESTION_RAG_PROMPT,
 )
 from app.core.retry_policy import bedrock_retry
 from app.schemas.fixed_question import (
@@ -154,6 +155,49 @@ class BedrockService:
                 reason=f"LLM 평가 실패, 기본값 반환: {error}",
                 source="fallback",
             )
+
+    @bedrock_retry
+    async def generate_rag_questions_async(
+        self,
+        reference_questions: list[str],
+        game_info: dict,
+        count: int = 5,
+    ) -> list[str]:
+        """RAG 기반 질문 생성 (참고 질문 스타일 반영)."""
+        from typing import List
+        from pydantic import BaseModel, Field
+
+        class RagResponse(BaseModel):
+            questions: List[str] = Field(description="생성된 질문 목록")
+
+        try:
+            prompt = ChatPromptTemplate.from_template(QUESTION_RAG_PROMPT)
+            structured_llm = self.chat_model.with_structured_output(RagResponse)
+            chain = prompt | structured_llm
+
+            # 게임 요소 포맷팅
+            elements = game_info.get("extracted_elements", {})
+            elements_str = ", ".join([f"{k}: {v}" for k, v in elements.items()]) if elements else "없음"
+
+            # 참고 질문 포맷팅
+            refs_str = "\n".join([f"- {q}" for q in reference_questions])
+
+            result: RagResponse = await chain.ainvoke(
+                {
+                    "game_name": game_info.get("game_name", ""),
+                    "game_description": game_info.get("game_description", ""),
+                    "extracted_elements": elements_str,
+                    "reference_questions": refs_str,
+                    "count": count,
+                }
+            )
+
+            return result.questions
+
+        except Exception as error:
+            logger.error(f"❌ RAG 질문 생성 실패: {error}")
+            # 실패 시 빈 리스트 반환 (호출 측에서 Fallback 처리)
+            return []
 
     @bedrock_retry
     async def evaluate_quality_async(
