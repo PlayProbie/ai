@@ -60,16 +60,21 @@ class InteractionService:
                     if event_count <= 10:
                         logger.debug(f"📨 Event #{event_count}: kind={event_kind}, name={event_name}")
 
-                    # LLM 스트리밍 시작 감지 (probe_llm 체인 또는 ChatBedrock)
+                    # LLM 스트리밍 시작 감지 (probe_llm 체인만 스트리밍)
                     if event_kind == "on_chat_model_start":
-                        is_streaming_active = True
-                        active_streaming_run_id = run_id
-                        logger.info(f"🎬 LLM 스트리밍 시작: {event_name}")
+                        # probe_llm 체인만 클라이언트에 스트리밍 (structured output 노드 제외)
+                        if event_name == "probe_llm" or "probe" in event_name.lower():
+                            is_streaming_active = True
+                            active_streaming_run_id = run_id
+                            logger.info(f"🎬 LLM 스트리밍 시작 (probe): {event_name}")
+                        else:
+                            logger.debug(f"🔇 LLM 스트리밍 스킵 (structured output): {event_name}")
 
-                    # LLM 토큰 스트리밍
+                    # LLM 토큰 스트리밍 (probe_llm만, tool_use 청크 제외)
                     elif event_kind == "on_chat_model_stream" and is_streaming_active:
                         chunk_content = self._extract_chunk_content(event)
-                        if chunk_content:
+                        # tool_use JSON 청크 필터링 (structured output 노이즈 방지)
+                        if chunk_content and not chunk_content.strip().startswith("{"):
                             message_buffer.append(chunk_content)
                             yield self._sse_event("continue", {"content": chunk_content})
 

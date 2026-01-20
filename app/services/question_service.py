@@ -92,6 +92,29 @@ DEFAULT_SLOT_VALUES = {
     "session_length": "한 판 길이",
 }
 
+# 한→영 카테고리 매핑 (Spring 서버가 한국어로 보내는 경우 대응)
+CATEGORY_MAP = {
+    # 대분류 (DB: gameplay, ui_ux, balance, story, bug, overall)
+    "재미": "gameplay",
+    "게임플레이": "gameplay",
+    "조작감": "ui_ux",
+    "UI/UX": "ui_ux",
+    "UI": "ui_ux",
+    "UX": "ui_ux",
+    "밸런스": "balance",
+    "스토리": "story",
+    "버그": "bug",
+    "기술": "bug",  # 기술 이슈 = bug 카테고리로 매핑
+    "전반": "overall",
+    "종합": "overall",
+    # 소분류 (필요시 추가)
+    "핵심 루프": "core_loop",
+    "재미요소": "fun",
+    "온보딩": "onboarding",
+    "조작": "controls",
+    "난이도": "difficulty_curve",
+}
+
 
 class QuestionService:
     """질문 추천 메인 서비스"""
@@ -102,6 +125,9 @@ class QuestionService:
     ):
         self.qc = question_collection
         self._query_cache: dict[str, QuestionRecommendResponse] = {}
+        # BedrockService Delayed Import to avoid circular dependency
+        from app.services.bedrock_service import BedrockService
+        self.bedrock_service = BedrockService()
 
     async def recommend_questions(
         self,
@@ -126,8 +152,12 @@ class QuestionService:
             return self._query_cache[cache_key]
 
         try:
+            # 0단계: 카테고리 정규화 (한→영 매핑)
+            normalized_categories = self._normalize_categories(request.purpose_categories)
+            logger.info(f"📂 카테고리 정규화: {request.purpose_categories} → {normalized_categories}")
+
             # 1단계: 벡터 검색 (의미 비슷한 질문 3배수 추출)
-            where_filter = {"purpose_category": {"$in": request.purpose_categories}}
+            where_filter = {"purpose_category": {"$in": normalized_categories}}
 
             # n_results 계산: 요청 개수 + 제외할 개수 + 여유분(MMR용)
             # 질문 풀이 작아서 필터링 후 개수가 부족할 수 있으므로 충분히 많이 가져옴 (최소 100개)
@@ -180,9 +210,64 @@ class QuestionService:
                 questions = self._apply_mmr(questions, request.top_k)
 
             # 5단계: 템플릿 치환 (빈칸 [slot]에 실제 게임 키워드 삽입)
-            questions = self._apply_template_substitution(
-                questions, request.extracted_elements
-            )
+            if not request.shuffle: # 셔플이 아닐 때만 템플릿 치환 (MMR 결과 그대로 사용 시)
+                questions = self._apply_template_substitution(
+                    questions, request.extracted_elements
+                )
+
+            # 6단계: RAG 기반 재생성 (Optional, but default for now)
+            # 검색된 질문들을 참고하여 새로운 최적화 질문 생성
+            if questions:
+                try:
+                    rag_questions = await self.bedrock_service.generate_rag_questions_async(
+                        reference_questions=[q.text for q in questions], # Top-K candidates as reference
+                        game_info={
+                            "game_name": request.game_name,
+                            "game_description": request.game_description,
+                            "extracted_elements": request.extracted_elements,
+                        },
+                        count=request.top_k,
+                    )
+
+                    if rag_questions:
+                        logger.info(f"✨ RAG Generated {len(rag_questions)} questions.")
+
+                        # 기존 RecommendedQuestion 구조에 맞춰 변환
+                        # (메타데이터는 첫 번째 후보나 대표값을 사용할 수도 있지만,
+                        #  여기서는 'Generated' 특성을 반영하여 새로 생성)
+                        new_questions = []
+                        for idx, text in enumerate(rag_questions):
+                            # ID는 임시로 생성하거나 해시값 사용
+                            import hashlib
+                            q_id = hashlib.md5(text.encode()).hexdigest()[:8]
+
+                            new_questions.append(
+                                RecommendedQuestion(
+                                    id=f"rag_{q_id}",
+                                    text=text,
+                                    original_text=text,
+                                    template=None,
+                                    slot_key=None,
+                                    purpose_category=request.purpose_categories[0] if request.purpose_categories else "General",
+                                    purpose_subcategory="RAG_Generated",
+                                    similarity_score=1.0, # Generated is always highly relevant
+                                    goal_match_score=1.0,
+                                    adoption_rate=0.0, # New question has no stats
+                                    final_score=1.0,
+                                    embedding=None,
+                                )
+                            )
+                        questions = new_questions
+                    else:
+                        logger.warning("⚠️ RAG generation returned empty list. Falling back to retrieved questions.")
+                        # Fallback: Apply template substitution to original questions if not already done
+                        if request.shuffle:
+                             questions = self._apply_template_substitution(questions, request.extracted_elements)
+
+                except Exception as e:
+                    logger.error(f"⚠️ RAG Generation failed: {e}. Falling back to retrieved questions.")
+                    # Fallback logic
+                    questions = self._apply_template_substitution(questions, request.extracted_elements)
 
             # 응답에서 embedding 제거
             for q in questions:
@@ -222,6 +307,10 @@ class QuestionService:
         self._query_cache.clear()
         logger.info("🗑️ 추천 캐시 초기화됨")
 
+    def _normalize_categories(self, categories: list[str]) -> list[str]:
+        """한국어 카테고리를 영어로 변환 (매핑에 없으면 원본 유지)"""
+        return [CATEGORY_MAP.get(c, c) for c in categories]
+
     def _build_questions(
         self,
         results: dict,
@@ -240,7 +329,7 @@ class QuestionService:
                 continue
 
             # 장르 필터 (Strict)
-            if not self._matches_genre(metadata["genres"], request.genres):
+            if not self._matches_genre(metadata.get("genres", "*"), request.genres):
                 continue
 
             # 단계 필터 (Relaxed - 사용자 요청으로 hard filtering 해제)
