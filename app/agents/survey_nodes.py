@@ -212,12 +212,11 @@ class SurveyNodes:
     # =========================================================================
 
     async def generate_probe(self, state: SurveyState) -> dict:
-        """DICE 프로브 질문 생성"""
+        """DICE 프로브 질문 생성 (astream_events에서 스트리밍 캡처)"""
         quality = state.get("quality", QualityType.EMPTY)
         current_question = state["current_question"]
         user_answer = state["user_answer"]
 
-        # 🔍 디버그 로깅: 실제 전달되는 값 확인
         logger.info(f"🔍 [probe] current_question: {current_question}")
         logger.info(f"🔍 [probe] user_answer: {user_answer}")
 
@@ -241,14 +240,17 @@ class SurveyNodes:
 
         from langchain_core.prompts import ChatPromptTemplate
         prompt = ChatPromptTemplate.from_template(prompt_map[probe_type])
-        chain = prompt | self.bedrock.chat_model
+        # 핵심: chain에 이름을 부여하여 astream_events에서 식별 가능하게 함
+        chain = (prompt | self.bedrock.chat_model).with_config({"run_name": "probe_llm"})
 
+        # ainvoke 사용 - astream_events가 LLM 토큰 스트리밍을 캡처함
         response = await chain.ainvoke({
-            "current_question": state["current_question"],
-            "user_answer": state["user_answer"],
+            "current_question": current_question,
+            "user_answer": user_answer,
         })
 
-        message = response.content.strip()
+        # 응답에서 텍스트 추출
+        message = self._extract_response_content(response)
 
         return {
             "action": SurveyAction.TAIL_QUESTION,
@@ -257,6 +259,16 @@ class SurveyNodes:
             "generated_message": message,
             "route": "done",
         }
+
+    def _extract_response_content(self, response) -> str:
+        """LLM 응답에서 텍스트 추출"""
+        content = response.content
+        if isinstance(content, list):
+            return "".join(
+                item.get("text", str(item)) if isinstance(item, dict) else str(item)
+                for item in content
+            ).strip()
+        return content.strip() if content else ""
 
     # =========================================================================
     # 리액션 생성 노드
