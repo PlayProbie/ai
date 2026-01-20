@@ -18,10 +18,9 @@ def build_survey_workflow(bedrock_service: BedrockService):
     # =========================================================================
     # 노드 등록
     # =========================================================================
-    workflow.add_node("validate", nodes.validate_answer)
+    workflow.add_node("evaluate_parallel", nodes.evaluate_parallel)  # [NEW] 병렬 실행 노드
     workflow.add_node("pass_to_next", nodes.pass_to_next)
     workflow.add_node("generate_retry", nodes.generate_retry)
-    workflow.add_node("evaluate_quality", nodes.evaluate_quality)
     workflow.add_node("generate_probe", nodes.generate_probe)
     workflow.add_node("generate_reaction", nodes.generate_reaction)
 
@@ -29,27 +28,17 @@ def build_survey_workflow(bedrock_service: BedrockService):
     # 엣지 연결
     # =========================================================================
 
-    # 시작 → 유효성 평가
-    workflow.set_entry_point("validate")
+    # 시작 → 병렬 평가 (유효성 + 품질)
+    workflow.set_entry_point("evaluate_parallel")
 
-    # 유효성 → 라우팅
+    # 통합 라우팅
     workflow.add_conditional_edges(
-        "validate",
-        nodes.route_by_validity,
+        "evaluate_parallel",
+        nodes.route_combined,
         {
-            "quality": "evaluate_quality",  # VALID → 품질 평가
-            "retry": "generate_retry",       # UNINTELLIGIBLE, OFF_TOPIC 등 → 재질문
-            "pass": "pass_to_next",          # REFUSAL, 재시도 초과 → 다음으로
-        }
-    )
-
-    # 품질 → 라우팅
-    workflow.add_conditional_edges(
-        "evaluate_quality",
-        nodes.route_by_quality,
-        {
-            "probe": "generate_probe",   # EMPTY, GROUNDED, FLOATING → 프로브
-            "pass": "pass_to_next",      # FULL, 제한 도달 → 다음으로
+            "probe": "generate_probe",
+            "retry": "generate_retry",
+            "pass": "pass_to_next",
         }
     )
 
