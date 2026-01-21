@@ -6,8 +6,9 @@
 """
 
 import os
-import streamlit as st
+
 import chromadb
+import streamlit as st
 
 # 프로젝트 루트 경로 (ai/ 디렉토리) 계산
 # tests/utils/chroma_viewer/viewer.py -> tests/utils/chroma_viewer -> tests/utils -> tests -> ai

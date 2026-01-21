@@ -21,9 +21,7 @@ api_router.include_router(
     survey_interaction.router, prefix="/surveys", tags=["surveys"]
 )
 
-api_router.include_router(
-    survey_session.router, prefix="/surveys", tags=["surveys"]
-)
+api_router.include_router(survey_session.router, prefix="/surveys", tags=["surveys"])
 
 api_router.include_router(embedding.router, prefix="/embeddings", tags=["embeddings"])
 
@@ -34,4 +32,3 @@ api_router.include_router(game.router, prefix="/game", tags=["game"])
 api_router.include_router(question.router, prefix="/questions", tags=["questions"])
 
 api_router.include_router(admin.router, prefix="/admin", tags=["admin"])
-

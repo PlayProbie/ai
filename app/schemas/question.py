@@ -22,8 +22,12 @@ class QuestionRecommendRequest(BaseModel):
     adoption_stats: dict[str, dict] | None = Field(
         default=None, alias="adoptionStats", description="채택 통계"
     )
-    top_k: int = Field(default=20, ge=1, le=50, alias="topK", description="추천 질문 개수")
-    shuffle: bool = Field(default=False, description="결과 랜덤 셔플 여부 (재생성 시 사용)")
+    top_k: int = Field(
+        default=20, ge=1, le=50, alias="topK", description="추천 질문 개수"
+    )
+    shuffle: bool = Field(
+        default=False, description="결과 랜덤 셔플 여부 (재생성 시 사용)"
+    )
     scoring_weights: dict[str, float] | None = Field(
         default=None, alias="scoringWeights", description="A/B 테스트용 가중치"
     )

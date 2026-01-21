@@ -42,7 +42,12 @@ ELEMENT_DEFINITIONS = {
     "narrative": {
         "name": "스토리/세계관",
         "description": "배경 설정과 이야기",
-        "examples": ["포스트 아포칼립스", "판타지 왕국", "근미래 디스토피아", "일상 로맨스"],
+        "examples": [
+            "포스트 아포칼립스",
+            "판타지 왕국",
+            "근미래 디스토피아",
+            "일상 로맨스",
+        ],
     },
     "main_character": {
         "name": "주인공/캐릭터",
@@ -202,10 +207,16 @@ GENRE_ELEMENT_MAPPING = {
         "required": ["narrative"],
         "optional": ["main_character", "exploration_element"],
     },
-    "시뮬레이션": {"required": ["simulation_target"], "optional": ["management_element"]},
+    "시뮬레이션": {
+        "required": ["simulation_target"],
+        "optional": ["management_element"],
+    },
     "퍼즐": {"required": ["puzzle_mechanic"], "optional": []},
     "전략": {"required": ["decision_type"], "optional": ["resource_system"]},
-    "RPG": {"required": ["progression_system"], "optional": ["narrative", "main_character"]},
+    "RPG": {
+        "required": ["progression_system"],
+        "optional": ["narrative", "main_character"],
+    },
     "아케이드": {"required": ["score_system"], "optional": ["difficulty_curve"]},
     "호러": {"required": ["horror_element"], "optional": ["atmosphere", "narrative"]},
     "슈팅": {"required": ["shooting_mechanic"], "optional": ["weapon_variety"]},
@@ -218,7 +229,10 @@ GENRE_ELEMENT_MAPPING = {
         "optional": ["randomness_element"],
     },
     "스포츠": {"required": ["sport_type", "play_mode"], "optional": []},
-    "리듬": {"required": ["rhythm_system"], "optional": ["music_genre", "input_method"]},
+    "리듬": {
+        "required": ["rhythm_system"],
+        "optional": ["music_genre", "input_method"],
+    },
     "대전": {"required": ["fighting_system"], "optional": ["character_roster"]},
     "캐주얼": {"required": [], "optional": ["session_length"]},
     # 영어 장르명 (대문자)
@@ -227,7 +241,10 @@ GENRE_ELEMENT_MAPPING = {
         "required": ["narrative"],
         "optional": ["main_character", "exploration_element"],
     },
-    "SIMULATION": {"required": ["simulation_target"], "optional": ["management_element"]},
+    "SIMULATION": {
+        "required": ["simulation_target"],
+        "optional": ["management_element"],
+    },
     "PUZZLE": {"required": ["puzzle_mechanic"], "optional": []},
     "STRATEGY": {"required": ["decision_type"], "optional": ["resource_system"]},
     "ARCADE": {"required": ["score_system"], "optional": ["difficulty_curve"]},
@@ -242,7 +259,10 @@ GENRE_ELEMENT_MAPPING = {
         "optional": ["randomness_element"],
     },
     "SPORTS": {"required": ["sport_type", "play_mode"], "optional": []},
-    "RHYTHM": {"required": ["rhythm_system"], "optional": ["music_genre", "input_method"]},
+    "RHYTHM": {
+        "required": ["rhythm_system"],
+        "optional": ["music_genre", "input_method"],
+    },
     "FIGHTING": {"required": ["fighting_system"], "optional": ["character_roster"]},
     "CASUAL": {"required": [], "optional": ["session_length"]},
 }

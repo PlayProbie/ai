@@ -17,10 +17,10 @@ logger = logging.getLogger(__name__)
 
 # 품질 → 프로브 유형 매핑
 PROBE_TYPE_MAP = {
-    QualityType.EMPTY: "DESCRIPTIVE",      # 상황 구체화 필요
-    QualityType.GROUNDED: "EXPLANATORY",   # 이유/감정 탐색 필요
-    QualityType.FLOATING: "DESCRIPTIVE",   # 상황 구체화 필요
-    QualityType.FULL: None,                # 프로브 불필요
+    QualityType.EMPTY: "DESCRIPTIVE",  # 상황 구체화 필요
+    QualityType.GROUNDED: "EXPLANATORY",  # 이유/감정 탐색 필요
+    QualityType.FLOATING: "DESCRIPTIVE",  # 상황 구체화 필요
+    QualityType.FULL: None,  # 프로브 불필요
 }
 
 
@@ -50,7 +50,9 @@ class QualityService:
             game_context=game_context or "",
         )
 
-        logger.info(f"📊 품질 평가 결과: {result.quality.value} (T:{result.thickness}, R:{result.richness})")
+        logger.info(
+            f"📊 품질 평가 결과: {result.quality.value} (T:{result.thickness}, R:{result.richness})"
+        )
         return result
 
     def get_probe_type(self, quality: QualityType) -> str | None:

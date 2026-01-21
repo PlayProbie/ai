@@ -1,22 +1,24 @@
-import re
 import json
 import os
+import re
 
 SQL_FILE = "app/data/data.sql"
 OUTPUT_DIR = "app/data"
 OUTPUT_FILE = os.path.join(OUTPUT_DIR, "seed_questions.json")
 
+
 def parse_value(val):
     val = val.strip()
-    if val.upper() == 'NULL':
+    if val.upper() == "NULL":
         return None
-    if val.upper() == 'TRUE':
+    if val.upper() == "TRUE":
         return True
-    if val.upper() == 'FALSE':
+    if val.upper() == "FALSE":
         return False
     if val.startswith("'") and val.endswith("'"):
         return val[1:-1]
     return val
+
 
 def convert():
     if not os.path.exists(SQL_FILE):
@@ -30,7 +32,7 @@ def convert():
     # But text might contain commas. e.g. "Hello, world".
     # Better to use a slightly more robust splitter or regex.
 
-    with open(SQL_FILE, 'r') as f:
+    with open(SQL_FILE) as f:
         for line in f:
             if not line.startswith("INSERT INTO question_bank"):
                 continue
@@ -59,8 +61,9 @@ def convert():
             values.append("".join(current_val).strip())
 
             # Helper to safely get index
-            def get_val(idx):
-                if idx >= len(values): return None
+            def get_val(idx, values=values):
+                if idx >= len(values):
+                    return None
                 return parse_value(values[idx])
 
             # Order in SQL: id, text, template, slot_key, genres, test_phases, purpose_category, purpose_subcategory, active, created_at, updated_at
@@ -74,17 +77,18 @@ def convert():
                 "testPhases": get_val(5),
                 "purposeCategory": get_val(6),
                 "purposeSubcategory": get_val(7),
-                "active": get_val(8)
+                "active": get_val(8),
             }
             questions.append(q)
 
     # Ensure output dir exists
     os.makedirs(OUTPUT_DIR, exist_ok=True)
 
-    with open(OUTPUT_FILE, 'w', encoding='utf-8') as f:
+    with open(OUTPUT_FILE, "w", encoding="utf-8") as f:
         json.dump(questions, f, indent=2, ensure_ascii=False)
 
     print(f"✅ Converted {len(questions)} questions to {OUTPUT_FILE}")
+
 
 if __name__ == "__main__":
     convert()

@@ -25,7 +25,7 @@ logger = logging.getLogger(__name__)
 # 완전히 무의미한 응답만 걸러냄 (최소한의 필터)
 TRULY_EMPTY_PATTERNS = [
     r"^[\s\.\,\!\?\~\-\_]+$",  # 공백/구두점만
-    r"^\.+$",                   # 점만
+    r"^\.+$",  # 점만
 ]
 
 
@@ -110,8 +110,9 @@ class ValidityService:
     #         source="fallback",
     #     )
 
-
-    async def evaluate_validity(self, answer: str, current_question: str) -> ValidityResult:
+    async def evaluate_validity(
+        self, answer: str, current_question: str
+    ) -> ValidityResult:
         # 1차: 규칙 기반 (명백한 케이스)
         rule_result = self.preprocess_validity(answer)
 

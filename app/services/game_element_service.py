@@ -6,7 +6,6 @@ import json
 import logging
 
 from app.core.game_elements import (
-    ELEMENT_DEFINITIONS,
     GENERIC_PHRASES,
     GENRE_ELEMENT_MAPPING,
     build_extraction_prompt,
@@ -131,11 +130,11 @@ class GameElementService:
         except json.JSONDecodeError as e:
             logger.error(f"[GameElementService] JSON 파싱 실패: {e}, raw={raw_content}")
             # 실패 시 빈 요소로 반환
-            elements = {field: None for field in all_fields}
+            elements = dict.fromkeys(all_fields)
 
         except Exception as e:
             logger.error(f"[GameElementService] LLM 호출 실패: {e}")
-            elements = {field: None for field in all_fields}
+            elements = dict.fromkeys(all_fields)
 
         # 4. 모든 필드가 elements에 포함되도록 보장
         for field in all_fields:
@@ -151,9 +150,7 @@ class GameElementService:
         missing_required = self.check_missing_required(elements, required_fields)
 
         if missing_required:
-            logger.warning(
-                f"[GameElementService] 필수 항목 누락: {missing_required}"
-            )
+            logger.warning(f"[GameElementService] 필수 항목 누락: {missing_required}")
 
         # 7. 결과 반환
         return GameElementExtractResponse(

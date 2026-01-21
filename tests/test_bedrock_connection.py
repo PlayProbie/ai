@@ -4,12 +4,19 @@
 pytest로 실행하거나 직접 스크립트로 실행할 수 있습니다.
 """
 
+import os
 import sys
+
+import pytest
 
 from app.core.config import settings
 from app.services.bedrock_service import BedrockService
 
 
+@pytest.mark.skipif(
+    os.getenv("CI") == "true",
+    reason="Skip on CI - requires real AWS credentials",
+)
 def test_bedrock_connection():
     """Bedrock API 연결 테스트"""
     print("🔄 AWS Bedrock 연결 테스트 시작...")

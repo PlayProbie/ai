@@ -8,12 +8,10 @@ import logging
 from collections.abc import AsyncGenerator
 from typing import TYPE_CHECKING
 
-from app.core.exceptions import AIGenerationException
 from app.core.prompts import (
     CLOSING_PROMPT_MAP,
     CLOSING_QUESTION_PROMPT,
     GREETING_PROMPT,
-    OPENING_QUESTION_PROMPT,
 )
 from app.schemas.survey import (
     EndReason,
@@ -26,9 +24,6 @@ if TYPE_CHECKING:
     from app.services.bedrock_service import BedrockService
 
 logger = logging.getLogger(__name__)
-
-
-
 
 
 class SessionService:
@@ -78,9 +73,7 @@ class SessionService:
                 yield self._sse_event("greeting_continue", {"content": token})
 
             # 인사말 완료 - 첫번째 질문은 Spring이 DB에서 조회하여 전송
-            yield self._sse_event("greeting_done", {
-                "greeting_text": greeting.strip()
-            })
+            yield self._sse_event("greeting_done", {"greeting_text": greeting.strip()})
 
         except Exception as e:
             logger.error(f"❌ Opening stream error: {e}")
@@ -103,7 +96,9 @@ class SessionService:
         3. done: 완료 + 전체 질문 텍스트
         """
         try:
-            yield self._sse_event("start", {"status": "processing", "phase": "closing_question"})
+            yield self._sse_event(
+                "start", {"status": "processing", "phase": "closing_question"}
+            )
 
             game_info = game_info or {}
             game_name = game_info.get("name", "게임")
@@ -125,13 +120,16 @@ class SessionService:
                 yield self._sse_event("continue", {"content": token})
 
             # 완료 이벤트
-            yield self._sse_event("done", {
-                "status": "completed",
-                "phase": "closing_question",
-                "question_text": full_message.strip(),
-                "question_type": "CLOSING_QUESTION",
-                "end_reason": end_reason,
-            })
+            yield self._sse_event(
+                "done",
+                {
+                    "status": "completed",
+                    "phase": "closing_question",
+                    "question_text": full_message.strip(),
+                    "question_type": "CLOSING_QUESTION",
+                    "end_reason": end_reason,
+                },
+            )
 
         except Exception as e:
             logger.error(f"❌ Closing question stream error: {e}")
@@ -174,12 +172,15 @@ class SessionService:
                 yield self._sse_event("continue", {"content": token})
 
             # 완료 이벤트
-            yield self._sse_event("done", {
-                "status": "completed",
-                "phase": InterviewPhase.CLOSING.value,
-                "end_reason": request.end_reason.value,
-                "message": full_message.strip(),
-            })
+            yield self._sse_event(
+                "done",
+                {
+                    "status": "completed",
+                    "phase": InterviewPhase.CLOSING.value,
+                    "end_reason": request.end_reason.value,
+                    "message": full_message.strip(),
+                },
+            )
 
         except Exception as e:
             logger.error(f"❌ Closing stream error: {e}")

@@ -221,7 +221,7 @@ class QuestionService:
                         # (메타데이터는 첫 번째 후보나 대표값을 사용할 수도 있지만,
                         #  여기서는 'Generated' 특성을 반영하여 새로 생성)
                         new_questions = []
-                        for idx, text in enumerate(rag_questions):
+                        for _, text in enumerate(rag_questions):
                             # ID는 임시로 생성하거나 해시값 사용
                             import hashlib
 

@@ -55,9 +55,7 @@ async def lifespan(app: FastAPI):
     try:
         app.state.question_collection = QuestionCollection()
         app.state.sync_service = QuestionSyncService(app.state.question_collection)
-        app.state.question_service = QuestionService(
-            app.state.question_collection
-        )
+        app.state.question_service = QuestionService(app.state.question_collection)
         logger.info("✅ 질문 추천 서비스 초기화 완료")
     except Exception as e:
         logger.error(f"❌ 질문 추천 서비스 초기화 실패: {e}")
@@ -66,7 +64,10 @@ async def lifespan(app: FastAPI):
         app.state.question_service = None
 
     # 시작 시 동기화 시도 (실패해도 서버는 뜸)
-    if app.state.question_collection and app.state.question_collection.collection.count() == 0:
+    if (
+        app.state.question_collection
+        and app.state.question_collection.collection.count() == 0
+    ):
         try:
             await app.state.sync_service.full_sync()
             logger.info("✅ 질문 뱅크 초기 동기화 완료")
