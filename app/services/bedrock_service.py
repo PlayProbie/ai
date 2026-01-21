@@ -21,9 +21,13 @@ from app.schemas.fixed_question import (
     FixedQuestionFeedback,
     FixedQuestionFeedbackCreate,
 )
-from app.schemas.survey import AnswerAnalysis # 삭제 가능해지면 삭제
-from app.schemas.survey import ValidityType, ValidityResult
-from app.schemas.survey import QualityResult, QualityType
+from app.schemas.survey import (
+    AnswerAnalysis,  # 삭제 가능해지면 삭제
+    QualityResult,
+    QualityType,
+    ValidityResult,
+    ValidityType,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -37,12 +41,24 @@ class BedrockService:
             os.environ["AWS_BEARER_TOKEN_BEDROCK"] = settings.AWS_BEDROCK_API_KEY
 
         try:
+            # 메인 모델 (생성용 - Sonnet 등)
             self.chat_model = ChatBedrockConverse(
                 model=settings.BEDROCK_MODEL_ID,
                 temperature=settings.TEMPERATURE,
                 max_tokens=settings.MAX_TOKENS,
                 region_name=settings.BEDROCK_REGION,
             )
+            logger.info(f"✅ 메인 모델 초기화: {settings.BEDROCK_MODEL_ID}")
+
+            # 평가 전용 모델 (Haiku 4.5) - 유효성/품질 평가에 사용
+            self.evaluation_model = ChatBedrockConverse(
+                model=settings.BEDROCK_EVALUATION_MODEL_ID,
+                temperature=0.0,  # 평가는 일관성 중요 → 낮은 temperature
+                max_tokens=512,  # 평가 응답은 짧음
+                region_name=settings.BEDROCK_REGION,
+            )
+            logger.info(f"✅ 평가 모델 초기화: {settings.BEDROCK_EVALUATION_MODEL_ID}")
+
         except Exception as error:
             logger.error(
                 f"❌ Bedrock 모델 초기화 실패: {type(error).__name__}: {error}"
@@ -135,7 +151,10 @@ class BedrockService:
 
         try:
             prompt = ChatPromptTemplate.from_template(VALIDITY_EVALUATION_PROMPT)
-            structured_llm = self.chat_model.with_structured_output(ValidityResult)
+            # Haiku 4.5 모델 사용 (빠르고 저렴한 평가용)
+            structured_llm = self.evaluation_model.with_structured_output(
+                ValidityResult
+            )
             chain = prompt | structured_llm
 
             result: ValidityResult = await chain.ainvoke(
@@ -164,11 +183,11 @@ class BedrockService:
         count: int = 5,
     ) -> list[str]:
         """RAG 기반 질문 생성 (참고 질문 스타일 반영)."""
-        from typing import List
+
         from pydantic import BaseModel, Field
 
         class RagResponse(BaseModel):
-            questions: List[str] = Field(description="생성된 질문 목록")
+            questions: list[str] = Field(description="생성된 질문 목록")
 
         try:
             prompt = ChatPromptTemplate.from_template(QUESTION_RAG_PROMPT)
@@ -177,7 +196,11 @@ class BedrockService:
 
             # 게임 요소 포맷팅
             elements = game_info.get("extracted_elements", {})
-            elements_str = ", ".join([f"{k}: {v}" for k, v in elements.items()]) if elements else "없음"
+            elements_str = (
+                ", ".join([f"{k}: {v}" for k, v in elements.items()])
+                if elements
+                else "없음"
+            )
 
             # 참고 질문 포맷팅
             refs_str = "\n".join([f"- {q}" for q in reference_questions])
@@ -211,7 +234,8 @@ class BedrockService:
 
         try:
             prompt = ChatPromptTemplate.from_template(QUALITY_EVALUATION_PROMPT)
-            structured_llm = self.chat_model.with_structured_output(QualityResult)
+            # Haiku 4.5 모델 사용 (빠르고 저렴한 평가용)
+            structured_llm = self.evaluation_model.with_structured_output(QualityResult)
             chain = prompt | structured_llm
 
             result: QualityResult = await chain.ainvoke(
@@ -337,16 +361,20 @@ class BedrockService:
                 f"꼬리 질문 생성 중 오류 발생: {error}"
             ) from error
 
-    async def generate_reaction_async(self, user_answer: str, current_question: str = "") -> str:
+    async def generate_reaction_async(
+        self, user_answer: str, current_question: str = ""
+    ) -> str:
         """사용자 답변에 대한 간단한 리액션 생성 (DB 저장 X, UI 표시용)."""
         try:
             prompt = ChatPromptTemplate.from_template(GENERATE_REACTION_PROMPT)
             chain = prompt | self.chat_model
 
-            response = await chain.ainvoke({
-                "user_answer": user_answer,
-                "current_question": current_question,
-            })
+            response = await chain.ainvoke(
+                {
+                    "user_answer": user_answer,
+                    "current_question": current_question,
+                }
+            )
             return response.content.strip()
 
         except Exception as error:

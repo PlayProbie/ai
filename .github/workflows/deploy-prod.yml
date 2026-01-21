@@ -99,6 +99,7 @@ jobs:
               "echo \"AWS_BEDROCK_API_KEY=${{ secrets.PROD_AWS_BEDROCK_API_KEY }}\" >> /tmp/fastapi-ai/.env",
               "echo \"BEDROCK_MODEL_ID=${{ secrets.PROD_BEDROCK_MODEL_ID }}\" >> /tmp/fastapi-ai/.env",
               "echo \"BEDROCK_EMBEDDING_MODEL_ID=${{ secrets.PROD_BEDROCK_EMBEDDING_MODEL_ID }}\" >> /tmp/fastapi-ai/.env",
+              "echo \"BEDROCK_EVALUATION_MODEL_ID=${{ secrets.PROD_BEDROCK_EVALUATION_MODEL_ID }}\" >> /tmp/fastapi-ai/.env",
               "echo \"TEMPERATURE=${{ secrets.PROD_TEMPERATURE }}\" >> /tmp/fastapi-ai/.env",
               "echo \"MAX_TOKENS=${{ secrets.PROD_MAX_TOKENS }}\" >> /tmp/fastapi-ai/.env",
               "echo \"TOP_P=${{ secrets.PROD_TOP_P }}\" >> /tmp/fastapi-ai/.env",
