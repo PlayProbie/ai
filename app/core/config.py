@@ -22,6 +22,9 @@ class Settings(BaseSettings):
     # Bedrock 모델 설정 - 필수 (기본값 없음)
     BEDROCK_MODEL_ID: str
 
+    # 평가 전용 모델 (Haiku 4.5) - 빠르고 저렴한 모델로 유효성/품질 평가에 사용
+    BEDROCK_EVALUATION_MODEL_ID: str
+
     # 생성 파라미터 - 필수 (기본값 없음)
     TEMPERATURE: float
     MAX_TOKENS: int
