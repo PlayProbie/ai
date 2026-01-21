@@ -1,0 +1,83 @@
+name: Python CI with uv
+
+on:
+  pull_request:
+    branches:
+      - "main"
+      - "develop"
+
+jobs:
+  ci:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      checks: write
+      pull-requests: write
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: Set up Python
+        run: uv python install
+
+      - name: Install dependencies
+        run: uv sync --all-groups
+
+      - name: Lint check (Ruff)
+        run: uv run ruff check .
+
+      - name: Format check (Ruff)
+        run: uv run ruff format --check .
+
+      - name: Run tests (Pytest)
+        run: uv run pytest --tb=short -q
+
+      - name: Calculate Build Duration
+        id: duration
+        if: always()
+        run: |
+          START_TIME="${{ github.event.repository.pushed_at }}"
+          if [ -z "$START_TIME" ]; then
+            START_TIME=$(date -u +%s)
+          else
+             START_TIME=$(date -d "$START_TIME" +%s)
+          fi
+          END_TIME=$(date -u +%s)
+          DURATION=$((END_TIME - START_TIME))
+          MINUTES=$((DURATION / 60))
+          SECONDS=$((DURATION % 60))
+          echo "formatted_duration=${MINUTES}m ${SECONDS}s" >> $GITHUB_OUTPUT
+
+      - name: Comment PR
+        uses: thollander/actions-comment-pull-request@v2
+        if: always()
+        with:
+          comment_tag: ai_ci_report
+          mode: recreate
+          message: |
+            ## ${{ job.status == 'success' && '✅ AI CI Successful' || '❌ AI CI Failed' }}
+
+            **Build #${{ github.run_number }}** ${{ job.status == 'success' && 'completed successfully!' || 'encountered errors.' }}
+
+            ### 🔍 Quality Checks
+            - 🧹 **Lint (Ruff)**: ${{ job.status == 'success' && '✅ Passed' || '❌ Failed' }}
+            - 📝 **Format (Ruff)**: ${{ job.status == 'success' && '✅ Passed' || '❌ Failed' }}
+
+            ### 🧪 Test Results
+            - ${{ job.status == 'success' && '✅ All tests passed' || '❌ Some tests failed' }}
+            - ⏱️ Duration: ${{ steps.duration.outputs.formatted_duration }}
+
+            ### 📦 Build Info
+            - **Commit**: `${{ github.sha }}`
+            - **Branch**: `${{ github.head_ref }}`
+            - **Author**: @${{ github.actor }}
+            - **Python Version**: 3.12+
+            - **Package Manager**: uv
+
+            [View detailed logs →](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})
