@@ -10,7 +10,6 @@ from app.core.prompts import (
     PROBE_DESCRIPTIVE_PROMPT,
     PROBE_EXPLANATORY_PROMPT,
     PROBE_IDIOGRAPHIC_PROMPT,
-    REDIRECT_QUESTION_PROMPT,
 )
 from app.schemas.survey import (
     EndReason,
@@ -28,8 +27,9 @@ class SurveyNodes:
 
     def __init__(self, bedrock_service: BedrockService):
         self.bedrock = bedrock_service
-        from app.services.validity_service import ValidityService
         from app.services.quality_service import QualityService
+        from app.services.validity_service import ValidityService
+
         self.validity_service = ValidityService(bedrock_service)
         self.quality_service = QualityService(bedrock_service)
 
@@ -39,7 +39,7 @@ class SurveyNodes:
 
     async def validate_answer(self, state: SurveyState) -> dict:
         """응답 유효성 평가"""
-        logger.info(f"🔍 [validate] 유효성 평가 시작")
+        logger.info("🔍 [validate] 유효성 평가 시작")
 
         try:
             result = await self.validity_service.evaluate_validity(
@@ -94,7 +94,7 @@ class SurveyNodes:
 
     async def pass_to_next(self, state: SurveyState) -> dict:
         """다음 질문으로 이동 처리"""
-        logger.info(f"➡️ [pass] 다음 질문으로 이동")
+        logger.info("➡️ [pass] 다음 질문으로 이동")
 
         validity = state.get("validity")
         is_last = self._is_last_question(state)
@@ -125,11 +125,15 @@ class SurveyNodes:
     async def generate_retry(self, state: SurveyState) -> dict:
         """재질문/명확화 질문 생성"""
         validity = state.get("validity")
-        logger.info(f"🔄 [retry] 재질문 생성: {validity.value if validity else 'UNKNOWN'}")
+        logger.info(
+            f"🔄 [retry] 재질문 생성: {validity.value if validity else 'UNKNOWN'}"
+        )
 
         # 유효성 유형별 메시지 생성
         if validity == ValidityType.UNINTELLIGIBLE:
-            message = "죄송하지만 답변을 잘 이해하지 못했어요. 다시 한 번 말씀해 주시겠어요?"
+            message = (
+                "죄송하지만 답변을 잘 이해하지 못했어요. 다시 한 번 말씀해 주시겠어요?"
+            )
             followup_type = "rephrase"
 
         elif validity == ValidityType.OFF_TOPIC:
@@ -159,9 +163,11 @@ class SurveyNodes:
     async def _generate_redirect_message(self, state: SurveyState) -> str:
         """OFF_TOPIC 재질문 생성"""
         question = state["current_question"]
-        return f"그 부분도 좋은 의견이네요! 혹시 원래 질문에 답해주시겠어요?"
+        return "그 부분도 좋은 의견이네요! 혹시 원래 질문에 답해주시겠어요?"
 
-    async def _generate_clarify_message(self, state: SurveyState, validity: ValidityType) -> str:
+    async def _generate_clarify_message(
+        self, state: SurveyState, validity: ValidityType
+    ) -> str:
         """AMBIGUOUS/CONTRADICTORY 명확화 질문"""
         if validity == ValidityType.AMBIGUOUS:
             return "조금 더 구체적으로 말씀해 주실 수 있을까요? 어떤 부분을 말씀하시는 건지 궁금해요."
@@ -174,7 +180,7 @@ class SurveyNodes:
 
     async def evaluate_quality(self, state: SurveyState) -> dict:
         """응답 품질 평가 (Thickness × Richness)"""
-        logger.info(f"📊 [quality] 품질 평가 시작")
+        logger.info("📊 [quality] 품질 평가 시작")
 
         try:
             game_context = ""
@@ -219,7 +225,7 @@ class SurveyNodes:
 
         # 강제 PASS 조건
         if current_tails >= max_tails:
-            logger.info(f"🛑 [quality_route] 꼬리질문 제한 도달")
+            logger.info("🛑 [quality_route] 꼬리질문 제한 도달")
             return "pass"
 
         # 품질 기반
@@ -235,7 +241,8 @@ class SurveyNodes:
     async def evaluate_parallel(self, state: SurveyState) -> dict:
         """유효성 검사와 품질 평가 병렬 실행 (asyncio.gather)"""
         import asyncio
-        logger.info(f"🚀 [parallel] 유효성 & 품질 평가 동시 실행")
+
+        logger.info("🚀 [parallel] 유효성 & 품질 평가 동시 실행")
 
         # 두 태스크 동시 생성 및 실행
         task1 = self.validate_answer(state)
@@ -259,7 +266,7 @@ class SurveyNodes:
 
         # 1. 유효성 검사 실패 시 -> Retry 우선
         if validity != ValidityType.VALID:
-             # REFUSAL은 바로 패스
+            # REFUSAL은 바로 패스
             if validity == ValidityType.REFUSAL:
                 return "pass"
 
@@ -275,7 +282,7 @@ class SurveyNodes:
 
         # 강제 PASS 조건
         if current_tails >= max_tails:
-            logger.info(f"🛑 [route] 꼬리질문 제한 도달")
+            logger.info("🛑 [route] 꼬리질문 제한 도달")
             return "pass"
 
         if quality == QualityType.FULL:
@@ -314,22 +321,27 @@ class SurveyNodes:
             "CLARIFYING": PROBE_CLARIFYING_PROMPT,
         }
 
-        from langchain_core.prompts import ChatPromptTemplate
         from langchain_core.callbacks.manager import dispatch_custom_event
+        from langchain_core.prompts import ChatPromptTemplate
 
         if config is None:
             config = {}
 
         prompt = ChatPromptTemplate.from_template(prompt_map[probe_type])
-        chain = (prompt | self.bedrock.chat_model).with_config({"run_name": "probe_llm"})
+        chain = (prompt | self.bedrock.chat_model).with_config(
+            {"run_name": "probe_llm"}
+        )
 
         # astream 사용해 토큰 스트리밍 이벤트 발생 유도
         full_response_text = ""
         # config를 전달해야 상위 astream_events에 이벤트 전파됨
-        async for chunk in chain.astream({
-            "current_question": current_question,
-            "user_answer": user_answer,
-        }, config=config):
+        async for chunk in chain.astream(
+            {
+                "current_question": current_question,
+                "user_answer": user_answer,
+            },
+            config=config,
+        ):
             # 스트리밍 청크 누적 (ChatBedrockConverse chunk 처리 - 리스트/딕셔너리)
             content = chunk.content
             text_chunk = ""
@@ -346,7 +358,9 @@ class SurveyNodes:
             if text_chunk:
                 full_response_text += text_chunk
                 # 수동 이벤트 발생 (상위 InteractionService에서 감지)
-                dispatch_custom_event("probe_stream", {"content": text_chunk}, config=config)
+                dispatch_custom_event(
+                    "probe_stream", {"content": text_chunk}, config=config
+                )
 
         # 응답 텍스트 설정
         message = full_response_text.strip()
@@ -375,7 +389,7 @@ class SurveyNodes:
 
     async def generate_reaction(self, state: SurveyState) -> dict:
         """리액션 생성"""
-        logger.info(f"✨ [reaction] 리액션 생성 시작 (PASS_TO_NEXT Path)")
+        logger.info("✨ [reaction] 리액션 생성 시작 (PASS_TO_NEXT Path)")
         reaction = await self.bedrock.generate_reaction_async(
             user_answer=state["user_answer"],
             current_question=state.get("current_question", ""),

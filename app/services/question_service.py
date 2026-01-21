@@ -1,11 +1,9 @@
 """질문 추천 서비스 - 필터링 + 스코어링 + MMR + 템플릿 치환"""
 
 import logging
-
-import numpy as np
 import random
 
-from typing import TYPE_CHECKING
+import numpy as np
 
 from app.core.exceptions import AIGenerationException
 from app.core.question_collection import QuestionCollection
@@ -14,8 +12,6 @@ from app.schemas.question import (
     QuestionRecommendResponse,
     RecommendedQuestion,
 )
-
-
 
 logger = logging.getLogger(__name__)
 
@@ -31,63 +27,48 @@ DEFAULT_SLOT_VALUES = {
     # 공통 (모든 장르 필수)
     "core_mechanic": "핵심 메카닉",
     "player_goal": "플레이어 목표",
-
     # 액션
     "combat_system": "전투 시스템",
     "control_scheme": "조작 방식",
-
     # 어드벤처
     "narrative": "스토리",
     "main_character": "주인공",
     "exploration_element": "탐험 요소",
-
     # 시뮬레이션
     "simulation_target": "시뮬레이션 대상",
     "management_element": "관리 요소",
-
     # 퍼즐
     "puzzle_mechanic": "퍼즐 방식",
-
     # 전략
     "decision_type": "의사결정 요소",
     "resource_system": "자원 시스템",
-
     # RPG
     "progression_system": "성장 시스템",
-
     # 아케이드
     "score_system": "스코어 시스템",
     "difficulty_curve": "난이도 곡선",
-
     # 호러
     "horror_element": "공포 연출 방식",
     "atmosphere": "분위기",
-
     # 슈팅
     "shooting_mechanic": "슈팅 방식",
     "weapon_variety": "무기 종류",
-
     # 비주얼 노벨
     "choice_system": "선택지 시스템",
-
     # 로그라이크
     "run_structure": "런 구조",
     "permanent_progression": "영구 성장 요소",
     "randomness_element": "랜덤 요소",
-
     # 스포츠
     "sport_type": "종목",
     "play_mode": "플레이 모드",
-
     # 리듬
     "rhythm_system": "리듬 시스템",
     "music_genre": "음악 장르",
     "input_method": "입력 방식",
-
     # 대전
     "fighting_system": "대전 시스템",
     "character_roster": "캐릭터 로스터",
-
     # 캐주얼
     "session_length": "한 판 길이",
 }
@@ -124,9 +105,9 @@ class QuestionService:
         question_collection: QuestionCollection,
     ):
         self.qc = question_collection
-        self._query_cache: dict[str, QuestionRecommendResponse] = {}
         # BedrockService Delayed Import to avoid circular dependency
         from app.services.bedrock_service import BedrockService
+
         self.bedrock_service = BedrockService()
 
     async def recommend_questions(
@@ -142,19 +123,15 @@ class QuestionService:
         4. MMR 다양성 알고리즘
         5. 템플릿 슬롯 치환
         """
-        # 1단계: 캐시 체크 - 이미 계산한 적 있는 요청이면 바로 반환
-        cache_key = self._make_cache_key(request)
-        # 1단계: 캐시 체크 - 이미 계산한 적 있는 요청이면 바로 반환
-        # 단, shuffle=True인 경우 매번 새로운 결과를 위해 캐시를 사용하지 않음
-        cache_key = self._make_cache_key(request)
-        if not request.shuffle and cache_key in self._query_cache:
-            logger.info(f"🎯 캐시 히트: {cache_key[:30]}...")
-            return self._query_cache[cache_key]
 
         try:
             # 0단계: 카테고리 정규화 (한→영 매핑)
-            normalized_categories = self._normalize_categories(request.purpose_categories)
-            logger.info(f"📂 카테고리 정규화: {request.purpose_categories} → {normalized_categories}")
+            normalized_categories = self._normalize_categories(
+                request.purpose_categories
+            )
+            logger.info(
+                f"📂 카테고리 정규화: {request.purpose_categories} → {normalized_categories}"
+            )
 
             # 1단계: 벡터 검색 (의미 비슷한 질문 3배수 추출)
             where_filter = {"purpose_category": {"$in": normalized_categories}}
@@ -163,7 +140,7 @@ class QuestionService:
             # 질문 풀이 작아서 필터링 후 개수가 부족할 수 있으므로 충분히 많이 가져옴 (최소 100개)
             n_fetch = min(
                 max(100, request.top_k * 5 + len(request.exclude_question_ids)),
-                self.qc.collection.count()
+                self.qc.collection.count(),
             )
 
             # 임베딩 차원 일치(1024)를 위해 명시적 임베딩 수행
@@ -199,7 +176,9 @@ class QuestionService:
             weights = request.scoring_weights or DEFAULT_WEIGHTS
             questions = self._calculate_scores(questions, request, weights)
 
-            logger.info(f"🃏 Shuffle Request: {request.shuffle} | Candidate Count: {len(questions)} | Top K: {request.top_k}")
+            logger.info(
+                f"🃏 Shuffle Request: {request.shuffle} | Candidate Count: {len(questions)} | Top K: {request.top_k}"
+            )
 
             # 4단계: 다양성 필터링 (Shuffle 또는 MMR)
             if request.shuffle:
@@ -210,7 +189,9 @@ class QuestionService:
                 questions = self._apply_mmr(questions, request.top_k)
 
             # 5단계: 템플릿 치환 (빈칸 [slot]에 실제 게임 키워드 삽입)
-            if not request.shuffle: # 셔플이 아닐 때만 템플릿 치환 (MMR 결과 그대로 사용 시)
+            if (
+                not request.shuffle
+            ):  # 셔플이 아닐 때만 템플릿 치환 (MMR 결과 그대로 사용 시)
                 questions = self._apply_template_substitution(
                     questions, request.extracted_elements
                 )
@@ -219,14 +200,18 @@ class QuestionService:
             # 검색된 질문들을 참고하여 새로운 최적화 질문 생성
             if questions:
                 try:
-                    rag_questions = await self.bedrock_service.generate_rag_questions_async(
-                        reference_questions=[q.text for q in questions], # Top-K candidates as reference
-                        game_info={
-                            "game_name": request.game_name,
-                            "game_description": request.game_description,
-                            "extracted_elements": request.extracted_elements,
-                        },
-                        count=request.top_k,
+                    rag_questions = (
+                        await self.bedrock_service.generate_rag_questions_async(
+                            reference_questions=[
+                                q.text for q in questions
+                            ],  # Top-K candidates as reference
+                            game_info={
+                                "game_name": request.game_name,
+                                "game_description": request.game_description,
+                                "extracted_elements": request.extracted_elements,
+                            },
+                            count=request.top_k,
+                        )
                     )
 
                     if rag_questions:
@@ -239,6 +224,7 @@ class QuestionService:
                         for idx, text in enumerate(rag_questions):
                             # ID는 임시로 생성하거나 해시값 사용
                             import hashlib
+
                             q_id = hashlib.md5(text.encode()).hexdigest()[:8]
 
                             new_questions.append(
@@ -248,26 +234,36 @@ class QuestionService:
                                     original_text=text,
                                     template=None,
                                     slot_key=None,
-                                    purpose_category=request.purpose_categories[0] if request.purpose_categories else "General",
+                                    purpose_category=request.purpose_categories[0]
+                                    if request.purpose_categories
+                                    else "General",
                                     purpose_subcategory="RAG_Generated",
-                                    similarity_score=1.0, # Generated is always highly relevant
+                                    similarity_score=1.0,  # Generated is always highly relevant
                                     goal_match_score=1.0,
-                                    adoption_rate=0.0, # New question has no stats
+                                    adoption_rate=0.0,  # New question has no stats
                                     final_score=1.0,
                                     embedding=None,
                                 )
                             )
                         questions = new_questions
                     else:
-                        logger.warning("⚠️ RAG generation returned empty list. Falling back to retrieved questions.")
+                        logger.warning(
+                            "⚠️ RAG generation returned empty list. Falling back to retrieved questions."
+                        )
                         # Fallback: Apply template substitution to original questions if not already done
                         if request.shuffle:
-                             questions = self._apply_template_substitution(questions, request.extracted_elements)
+                            questions = self._apply_template_substitution(
+                                questions, request.extracted_elements
+                            )
 
                 except Exception as e:
-                    logger.error(f"⚠️ RAG Generation failed: {e}. Falling back to retrieved questions.")
+                    logger.error(
+                        f"⚠️ RAG Generation failed: {e}. Falling back to retrieved questions."
+                    )
                     # Fallback logic
-                    questions = self._apply_template_substitution(questions, request.extracted_elements)
+                    questions = self._apply_template_substitution(
+                        questions, request.extracted_elements
+                    )
 
             # 응답에서 embedding 제거
             for q in questions:
@@ -279,33 +275,11 @@ class QuestionService:
                 scoring_weights_used=weights,
             )
 
-            # 캐시 저장 (Non-shuffle 요청만 저장)
-            if not request.shuffle:
-                self._query_cache[cache_key] = response
-
             return response
 
         except Exception as e:
             logger.error(f"❌ 질문 추천 실패: {e}")
             raise AIGenerationException(f"질문 추천 실패: {e}") from e
-
-    def _make_cache_key(self, request: QuestionRecommendRequest) -> str:
-        """캐시 키 생성"""
-        # 캐시 키에 다이나믹 파라미터(shuffle, exclude_ids, top_k)가 포함되어야 함
-        exclude_key = ",".join(sorted(request.exclude_question_ids)) if request.exclude_question_ids else ""
-        return (
-            f"{request.game_description[:50]}_"
-            f"{','.join(sorted(request.purpose_categories))}_"
-            f"{request.test_phase}_"
-            f"{request.top_k}_"
-            f"{request.shuffle}_"
-            f"{exclude_key}"
-        )
-
-    def clear_cache(self):
-        """캐시 초기화"""
-        self._query_cache.clear()
-        logger.info("🗑️ 추천 캐시 초기화됨")
 
     def _normalize_categories(self, categories: list[str]) -> list[str]:
         """한국어 카테고리를 영어로 변환 (매핑에 없으면 원본 유지)"""
@@ -460,8 +434,7 @@ class QuestionService:
                     )
 
                 mmr_score = (
-                    lambda_param * relevance
-                    - (1 - lambda_param) * max_sim_to_selected
+                    lambda_param * relevance - (1 - lambda_param) * max_sim_to_selected
                 )
 
                 if mmr_score > best_score:
@@ -495,13 +468,17 @@ class QuestionService:
         이렇게 하면 '관련성 높은' 질문들 중에서 '매번 다른' 질문이 나옵니다.
         """
         if len(questions) <= top_k:
-            logger.warning(f"⚠️ Shuffle Pass: Candidate pool ({len(questions)}) <= Top K ({top_k}). No variance possible.")
+            logger.warning(
+                f"⚠️ Shuffle Pass: Candidate pool ({len(questions)}) <= Top K ({top_k}). No variance possible."
+            )
             return questions
 
         # 1. 상위 후보군 추출 (Deep Copy 불필요, 슬라이싱만)
         pool_size = min(len(questions), top_k * pool_multiplier)
         candidate_pool = questions[:pool_size]
-        logger.info(f"🎲 Shuffling from pool of {len(candidate_pool)} items (Multiplier: {pool_multiplier})")
+        logger.info(
+            f"🎲 Shuffling from pool of {len(candidate_pool)} items (Multiplier: {pool_multiplier})"
+        )
 
         # 2. 랜덤 셔플
         # random.sample은 중복 없이 k개를 뽑습니다.
@@ -526,7 +503,9 @@ class QuestionService:
         logger.info(f"🔍 템플릿 치환 시작. 제공된 요소: {extracted_elements}")
 
         if not extracted_elements:
-            logger.info("⚠️ 제공된 템플릿 요소가 없습니다. 기본값(Fallback)을 사용합니다.")
+            logger.info(
+                "⚠️ 제공된 템플릿 요소가 없습니다. 기본값(Fallback)을 사용합니다."
+            )
 
         for q in questions:
             if q.template and q.slot_key:
@@ -542,9 +521,13 @@ class QuestionService:
                 if slot_value:
                     old_text = q.text
                     q.text = q.template.replace(f"[{q.slot_key}]", slot_value)
-                    logger.info(f"✅ 템플릿 치환: {q.slot_key} -> {slot_value} | {old_text} -> {q.text}")
+                    logger.info(
+                        f"✅ 템플릿 치환: {q.slot_key} -> {slot_value} | {old_text} -> {q.text}"
+                    )
                 else:
-                    logger.warning(f"⚠️ 치환 실패(기본값 없음): {q.slot_key} (질문ID: {q.id})")
+                    logger.warning(
+                        f"⚠️ 치환 실패(기본값 없음): {q.slot_key} (질문ID: {q.id})"
+                    )
             else:
                 # 템플릿이 없는 경우 (의도된 것일 수 있음)
                 pass

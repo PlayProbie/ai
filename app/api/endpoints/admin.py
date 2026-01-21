@@ -32,21 +32,9 @@ async def sync_questions(request: Request, full: bool = False):
         else:
             result = await sync_service.delta_sync()
 
-        # 캐시 초기화
-        if request.app.state.question_service:
-            request.app.state.question_service.clear_cache()
-
         return AdminResponse(success=True, message="동기화 완료", data=result)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e)) from e
-
-
-@router.post("/questions/clear-cache", response_model=AdminResponse)
-async def clear_cache(request: Request):
-    """추천 캐시 초기화"""
-    if request.app.state.question_service:
-        request.app.state.question_service.clear_cache()
-    return AdminResponse(success=True, message="캐시 초기화 완료")
 
 
 @router.get("/questions/stats")
@@ -54,11 +42,9 @@ async def get_question_stats(request: Request):
     """질문 뱅크 통계"""
     qc = request.app.state.question_collection
     sync_service = request.app.state.sync_service
-    question_service = request.app.state.question_service
 
     return {
         "total_questions": qc.collection.count() if qc else 0,
-        "cache_size": len(question_service._query_cache) if question_service else 0,
         "last_sync_time": (
             sync_service.last_sync_time.isoformat()
             if sync_service and sync_service.last_sync_time
