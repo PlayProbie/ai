@@ -14,6 +14,18 @@ jobs:
       checks: write
       pull-requests: write
 
+    env:
+      # Test environment variables for Pydantic Settings validation
+      AWS_BEDROCK_API_KEY: "test-api-key"
+      AWS_REGION: "ap-northeast-2"
+      BEDROCK_REGION: "us-west-1"
+      BEDROCK_MODEL_ID: "anthropic.claude-3-5-sonnet-20241022-v2:0"
+      BEDROCK_EVALUATION_MODEL_ID: "anthropic.claude-3-5-sonnet-20241022-v2:0"
+      BEDROCK_EMBEDDING_MODEL_ID: "amazon.titan-embed-text-v2:0"
+      TEMPERATURE: "0.7"
+      MAX_TOKENS: "4096"
+      TOP_P: "0.9"
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
