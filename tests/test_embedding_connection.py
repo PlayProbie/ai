@@ -1,11 +1,18 @@
 """Embedding 서비스 연결 테스트"""
 
+import os
 import sys
+
+import pytest
 
 from app.core.config import settings
 from app.services.embedding_service import EmbeddingService
 
 
+@pytest.mark.skipif(
+    os.getenv("CI") == "true",
+    reason="Skip on CI - requires real AWS credentials",
+)
 def test_embedding_connection():
     """Amazon Titan V2 + ChromaDB Embedded 연결 테스트"""
     print("🔄 Embedding 서비스 연결 테스트 시작...")
