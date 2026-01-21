@@ -21,9 +21,13 @@ from app.schemas.fixed_question import (
     FixedQuestionFeedback,
     FixedQuestionFeedbackCreate,
 )
-from app.schemas.survey import AnswerAnalysis # 삭제 가능해지면 삭제
-from app.schemas.survey import ValidityType, ValidityResult
-from app.schemas.survey import QualityResult, QualityType
+from app.schemas.survey import (
+    AnswerAnalysis,  # 삭제 가능해지면 삭제
+    QualityResult,
+    QualityType,
+    ValidityResult,
+    ValidityType,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -164,11 +168,11 @@ class BedrockService:
         count: int = 5,
     ) -> list[str]:
         """RAG 기반 질문 생성 (참고 질문 스타일 반영)."""
-        from typing import List
+
         from pydantic import BaseModel, Field
 
         class RagResponse(BaseModel):
-            questions: List[str] = Field(description="생성된 질문 목록")
+            questions: list[str] = Field(description="생성된 질문 목록")
 
         try:
             prompt = ChatPromptTemplate.from_template(QUESTION_RAG_PROMPT)
@@ -177,7 +181,11 @@ class BedrockService:
 
             # 게임 요소 포맷팅
             elements = game_info.get("extracted_elements", {})
-            elements_str = ", ".join([f"{k}: {v}" for k, v in elements.items()]) if elements else "없음"
+            elements_str = (
+                ", ".join([f"{k}: {v}" for k, v in elements.items()])
+                if elements
+                else "없음"
+            )
 
             # 참고 질문 포맷팅
             refs_str = "\n".join([f"- {q}" for q in reference_questions])
@@ -337,16 +345,20 @@ class BedrockService:
                 f"꼬리 질문 생성 중 오류 발생: {error}"
             ) from error
 
-    async def generate_reaction_async(self, user_answer: str, current_question: str = "") -> str:
+    async def generate_reaction_async(
+        self, user_answer: str, current_question: str = ""
+    ) -> str:
         """사용자 답변에 대한 간단한 리액션 생성 (DB 저장 X, UI 표시용)."""
         try:
             prompt = ChatPromptTemplate.from_template(GENERATE_REACTION_PROMPT)
             chain = prompt | self.chat_model
 
-            response = await chain.ainvoke({
-                "user_answer": user_answer,
-                "current_question": current_question,
-            })
+            response = await chain.ainvoke(
+                {
+                    "user_answer": user_answer,
+                    "current_question": current_question,
+                }
+            )
             return response.content.strip()
 
         except Exception as error:

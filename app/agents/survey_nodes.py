@@ -162,7 +162,8 @@ class SurveyNodes:
 
     async def _generate_redirect_message(self, state: SurveyState) -> str:
         """OFF_TOPIC 재질문 생성"""
-        question = state["current_question"]
+        # state["current_question"]은 향후 동적 메시지 생성 시 사용 예정
+        _ = state["current_question"]  # noqa: F841 - 미래 확장용
         return "그 부분도 좋은 의견이네요! 혹시 원래 질문에 답해주시겠어요?"
 
     async def _generate_clarify_message(

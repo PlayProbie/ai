@@ -1,5 +1,3 @@
-from typing import Optional
-
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
@@ -25,7 +23,7 @@ class FixedQuestionDraftCreate(BaseModel):
         max_length=3,
         description="테스트 대주제 우선순위 (1~3순위, 순서대로)",
     )
-    theme_details: Optional[dict[str, list[str]]] = Field(
+    theme_details: dict[str, list[str]] | None = Field(
         default=None, description="각 대주제별 소주제/키워드 (선택)"
     )
 
@@ -78,7 +76,7 @@ class FixedQuestionFeedbackCreate(BaseModel):
         max_length=3,
         description="테스트 대주제 우선순위 (1~3순위, 순서대로)",
     )
-    theme_details: Optional[dict[str, list[str]]] = Field(
+    theme_details: dict[str, list[str]] | None = Field(
         default=None, description="각 대주제별 소주제/키워드 (선택)"
     )
 

@@ -1,10 +1,10 @@
 """질문 뱅크 동기화 서비스 - Spring MariaDB → FastAPI ChromaDB"""
 
+import json
 import logging
+import os
 from datetime import datetime
 
-import json
-import os
 import httpx
 
 from app.core.config import settings
@@ -34,7 +34,7 @@ class QuestionSyncService:
             if os.path.exists(seed_file):
                 logger.info(f"📂 로컬 시드 파일 발견: {seed_file}")
                 try:
-                    with open(seed_file, "r", encoding="utf-8") as f:
+                    with open(seed_file, encoding="utf-8") as f:
                         questions = json.load(f)
                     logger.info(f"✅ 로컬 파일에서 {len(questions)}개 질문 로드 성공")
                 except Exception as e:

@@ -9,9 +9,7 @@ class GameElementExtractRequest(BaseModel):
     """게임 핵심 요소 추출 요청 DTO"""
 
     game_name: str = Field(..., description="게임 이름")
-    genres: list[str] = Field(
-        ..., min_length=1, max_length=3, description="장르 1~3개"
-    )
+    genres: list[str] = Field(..., min_length=1, max_length=3, description="장르 1~3개")
     game_description: str = Field(
         ..., max_length=2000, description="게임 설명 2000자 이내"
     )

@@ -18,7 +18,9 @@ def build_survey_workflow(bedrock_service: BedrockService):
     # =========================================================================
     # 노드 등록
     # =========================================================================
-    workflow.add_node("evaluate_parallel", nodes.evaluate_parallel)  # [NEW] 병렬 실행 노드
+    workflow.add_node(
+        "evaluate_parallel", nodes.evaluate_parallel
+    )  # [NEW] 병렬 실행 노드
     workflow.add_node("pass_to_next", nodes.pass_to_next)
     workflow.add_node("generate_retry", nodes.generate_retry)
     workflow.add_node("generate_probe", nodes.generate_probe)
@@ -39,7 +41,7 @@ def build_survey_workflow(bedrock_service: BedrockService):
             "probe": "generate_probe",
             "retry": "generate_retry",
             "pass": "pass_to_next",
-        }
+        },
     )
 
     # 프로브 → 종료 (리액션 제거)
