@@ -22,6 +22,9 @@ class Settings(BaseSettings):
     # Bedrock 모델 설정 - 필수 (기본값 없음)
     BEDROCK_MODEL_ID: str
 
+    # 평가 전용 모델 (Haiku 4.5) - 빠르고 저렴한 모델로 유효성/품질 평가에 사용
+    BEDROCK_EVALUATION_MODEL_ID: str
+
     # 생성 파라미터 - 필수 (기본값 없음)
     TEMPERATURE: float
     MAX_TOKENS: int
@@ -34,6 +37,9 @@ class Settings(BaseSettings):
     # Chroma 설정 (Embedded 모드 - 파일 저장)
     CHROMA_PERSIST_DIR: str = "./chroma_data"
     CHROMA_COLLECTION_NAME: str = "interactions"
+
+    # Spring 서버 URL (질문 뱅크 동기화용)
+    SPRING_SERVER_URL: str = "http://localhost:8080"
 
     model_config = SettingsConfigDict(
         # .env 파일 위치 지정 (없어도 에러 안남)

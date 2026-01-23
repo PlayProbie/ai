@@ -25,7 +25,7 @@ logger = logging.getLogger(__name__)
 # 완전히 무의미한 응답만 걸러냄 (최소한의 필터)
 TRULY_EMPTY_PATTERNS = [
     r"^[\s\.\,\!\?\~\-\_]+$",  # 공백/구두점만
-    r"^\.+$",                   # 점만
+    r"^\.+$",  # 점만
 ]
 
 
@@ -85,27 +85,44 @@ class ValidityService:
     # 메인 평가 메소드
     # =========================================================================
 
+    # async def evaluate_validity(
+    #     self,
+    #     answer: str,
+    #     current_question: str,
+    # ) -> ValidityResult:
+    #     """
+    #     유효성 평가 (규칙 기반만 사용, LLM 호출 X)
+
+    #     모든 응답은 규칙으로 판정:
+    #     - 빈 응답/구두점만 → UNINTELLIGIBLE
+    #     - 그 외 모두 → VALID
+    #     """
+    #     result = self.preprocess_validity(answer)
+    #     if result is not None:
+    #         return result
+
+    #     # 혹시 여기 오면 VALID로 폴백 (안전장치)
+    #     logger.info("✅ 기본 VALID 폴백")
+    #     return ValidityResult(
+    #         validity=ValidityType.VALID,
+    #         confidence=0.9,
+    #         reason="기본 VALID 폴백",
+    #         source="fallback",
+    #     )
+
     async def evaluate_validity(
-        self,
-        answer: str,
-        current_question: str,
+        self, answer: str, current_question: str
     ) -> ValidityResult:
-        """
-        유효성 평가 (규칙 기반만 사용, LLM 호출 X)
+        # 1차: 규칙 기반 (명백한 케이스)
+        rule_result = self.preprocess_validity(answer)
 
-        모든 응답은 규칙으로 판정:
-        - 빈 응답/구두점만 → UNINTELLIGIBLE
-        - 그 외 모두 → VALID
-        """
-        result = self.preprocess_validity(answer)
-        if result is not None:
-            return result
+        # UNINTELLIGIBLE은 규칙으로 확정
+        if rule_result and rule_result.validity == ValidityType.UNINTELLIGIBLE:
+            return rule_result
 
-        # 혹시 여기 오면 VALID로 폴백 (안전장치)
-        logger.info("✅ 기본 VALID 폴백")
-        return ValidityResult(
-            validity=ValidityType.VALID,
-            confidence=0.9,
-            reason="기본 VALID 폴백",
-            source="fallback",
+        # 2차: LLM 기반 (OFF_TOPIC, AMBIGUOUS, REFUSAL 등 판단)
+        llm_result = await self.bedrock_service.evaluate_validity_async(
+            answer=answer,
+            current_question=current_question,
         )
+        return llm_result

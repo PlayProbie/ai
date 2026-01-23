@@ -113,9 +113,15 @@ class EmbeddingService:
             "survey_uuid": request.survey_uuid,
             "fixed_question_id": request.fixed_question_id,
             "qa_count": len(request.qa_pairs),
+            # === Quality Metadata ===
+            "validity": request.validity,
+            "quality": request.quality,
         }
         if request.metadata:
             metadata.update(request.metadata)
+
+        # None 값 제거하여 저장공간 절약
+        metadata = {k: v for k, v in metadata.items() if v is not None}
 
         # 5. Chroma에 저장
         try:

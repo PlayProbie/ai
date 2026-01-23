@@ -31,5 +31,6 @@ docs/
 .github/
 chroma_data/
 data/
+!app/data/
 Dockerfile
 docker-compose.yml

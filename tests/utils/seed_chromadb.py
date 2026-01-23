@@ -1,16 +1,16 @@
 import asyncio
-import shutil
 import os
-import sys
 import random
+import shutil
+import sys
 
 from app.core.config import settings
-from app.services.embedding_service import EmbeddingService
 from app.schemas.embedding import (
     InteractionEmbeddingRequest,
     QuestionAnswerPair,
     QuestionType,
 )
+from app.services.embedding_service import EmbeddingService
 
 # 샘플 데이터 생성용 리스트
 GAMES = ["Elden Ring", "Cyberpunk 2077", "Stardew Valley", "Valorant", "Genshin Impact"]

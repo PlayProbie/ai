@@ -4,11 +4,13 @@ FastAPI Dependency Injection을 위한 의존성 팩토리 모듈
 
 from typing import Annotated
 
-from fastapi import Depends, Request
+from fastapi import Depends, HTTPException, Request
 
 from app.services.bedrock_service import BedrockService
 from app.services.embedding_service import EmbeddingService
+from app.services.game_element_service import GameElementService
 from app.services.interaction_service import InteractionService
+from app.services.question_service import QuestionService
 from app.services.session_service import SessionService
 from app.services.validity_service import ValidityService
 
@@ -33,6 +35,11 @@ async def get_session_service(request: Request) -> SessionService:
     return request.app.state.session_service
 
 
+async def get_game_element_service(request: Request) -> GameElementService:
+    """lifespan에서 초기화된 GameElementService를 app.state에서 가져옴"""
+    return request.app.state.game_element_service
+
+
 def get_validity_service(
     bedrock_service: BedrockService = Depends(get_bedrock_service),
 ) -> ValidityService:
@@ -45,4 +52,14 @@ BedrockServiceDep = Annotated[BedrockService, Depends(get_bedrock_service)]
 InteractionServiceDep = Annotated[InteractionService, Depends(get_interaction_service)]
 EmbeddingServiceDep = Annotated[EmbeddingService, Depends(get_embedding_service)]
 SessionServiceDep = Annotated[SessionService, Depends(get_session_service)]
+GameElementServiceDep = Annotated[GameElementService, Depends(get_game_element_service)]
 
+
+async def get_question_service(request: Request) -> QuestionService:
+    """lifespan에서 초기화된 QuestionService를 app.state에서 가져옴"""
+    if not request.app.state.question_service:
+        raise HTTPException(status_code=503, detail="질문 추천 서비스 미초기화")
+    return request.app.state.question_service
+
+
+QuestionServiceDep = Annotated[QuestionService, Depends(get_question_service)]

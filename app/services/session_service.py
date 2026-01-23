@@ -8,7 +8,11 @@ import logging
 from collections.abc import AsyncGenerator
 from typing import TYPE_CHECKING
 
-from app.core.exceptions import AIGenerationException
+from app.core.prompts import (
+    CLOSING_PROMPT_MAP,
+    CLOSING_QUESTION_PROMPT,
+    GREETING_PROMPT,
+)
 from app.schemas.survey import (
     EndReason,
     InterviewPhase,
@@ -20,113 +24,6 @@ if TYPE_CHECKING:
     from app.services.bedrock_service import BedrockService
 
 logger = logging.getLogger(__name__)
-
-
-# =============================================================================
-# Prompts
-# =============================================================================
-
-GREETING_PROMPT = """당신은 게임 플레이테스트 인터뷰어입니다.
-테스터를 맞이하는 환영 인사를 해주세요.
-
-# 정보
-- 게임 이름: {game_name}
-- 게임 설명: {game_context}
-- 테스트 단계: {test_phase}
-- 목표 테마: {target_theme}
-
-# 인사말 구성 (순서대로)
-1. 게임 간단 소개 (1문장): 게임 이름과 핵심 특징을 짧게 언급
-2. 설문 목적 설명 (1문장): 이번 테스트/설문의 목적을 간단히 설명
-3. 환영 인사 (1문장): 테스터에게 친근한 환영 메시지
-
-# 요구사항
-- 총 2-3문장, 100자 이내
-- 이모지 1-2개 사용 (👋, 🎮, 😊)
-- 친근하고 캐주얼한 존댓말
-- "감사합니다" 대신 "반갑습니다", "환영합니다" 사용
-
-# 예시
-"{game_name}을 플레이해주셔서 감사합니다! 🎮 오늘은 [목표 테마]에 대한 의견을 들어보려 해요. 편하게 이야기해 주세요! 👋"
-
-인사말:"""
-
-OPENING_QUESTION_PROMPT = """당신은 게임 플레이테스트 인터뷰어입니다.
-테스터에게 첫 번째 오프닝 질문을 해주세요.
-
-게임 이름: {game_name}
-게임 설명: {game_context}
-
-요구사항:
-- 개방형 질문으로 시작 (예/아니오 답변 불가)
-- "전반적으로 어떠셨어요?" 느낌의 자연스러운 질문
-- 편향 없이 테스터의 첫인상을 자유롭게 말하도록 유도
-
-오프닝 질문:"""
-
-CLOSING_QUESTION_PROMPT = """당신은 게임 플레이테스트 인터뷰어입니다.
-인터뷰를 마무리하기 전, 테스터에게 마지막으로 하고 싶은 말을 물어보세요.
-
-게임 이름: {game_name}
-종료 사유: {end_reason}
-
-요구사항:
-- "마지막으로 하고 싶은 말씀이 있으신가요?" 느낌의 자연스러운 질문
-- 개방형 질문으로 테스터가 자유롭게 의견을 말할 수 있도록
-- 1문장으로 간결하게
-
-마지막 질문:"""
-
-
-CLOSING_PROMPT_MAP = {
-    EndReason.ALL_DONE: """모든 질문이 완료되었습니다.
-테스터에게 감사 인사와 함께 따뜻한 마무리 멘트를 해주세요.
-
-게임 이름: {game_name}
-
-요구사항:
-- 인터뷰 참여에 대한 진심 어린 감사
-- 피드백이 게임 개발에 도움이 될 것임을 언급
-- 1-2문장으로 간결하게
-
-마무리 멘트:""",
-
-    EndReason.TIME_LIMIT: """시간이 다 되어 인터뷰를 마무리해야 합니다.
-테스터에게 양해를 구하고 감사 인사를 해주세요.
-
-게임 이름: {game_name}
-
-요구사항:
-- 시간 관계상 마무리함을 부드럽게 전달
-- 참여에 대한 감사
-- 1-2문장으로 간결하게
-
-마무리 멘트:""",
-
-    EndReason.FATIGUE: """테스터가 피로해 보입니다.
-부드럽게 인터뷰를 마무리해주세요.
-
-게임 이름: {game_name}
-
-요구사항:
-- 테스터의 시간과 노력에 감사
-- 강요 없이 자연스럽게 마무리
-- 1-2문장으로 간결하게
-
-마무리 멘트:""",
-
-    EndReason.COVERAGE: """주요 피드백을 충분히 수집했습니다.
-테스터에게 감사 인사를 해주세요.
-
-게임 이름: {game_name}
-
-요구사항:
-- 유익한 피드백에 대한 감사
-- 게임 개선에 도움이 될 것임을 언급
-- 1-2문장으로 간결하게
-
-마무리 멘트:""",
-}
 
 
 class SessionService:
@@ -176,9 +73,7 @@ class SessionService:
                 yield self._sse_event("greeting_continue", {"content": token})
 
             # 인사말 완료 - 첫번째 질문은 Spring이 DB에서 조회하여 전송
-            yield self._sse_event("greeting_done", {
-                "greeting_text": greeting.strip()
-            })
+            yield self._sse_event("greeting_done", {"greeting_text": greeting.strip()})
 
         except Exception as e:
             logger.error(f"❌ Opening stream error: {e}")
@@ -201,7 +96,9 @@ class SessionService:
         3. done: 완료 + 전체 질문 텍스트
         """
         try:
-            yield self._sse_event("start", {"status": "processing", "phase": "closing_question"})
+            yield self._sse_event(
+                "start", {"status": "processing", "phase": "closing_question"}
+            )
 
             game_info = game_info or {}
             game_name = game_info.get("name", "게임")
@@ -223,13 +120,16 @@ class SessionService:
                 yield self._sse_event("continue", {"content": token})
 
             # 완료 이벤트
-            yield self._sse_event("done", {
-                "status": "completed",
-                "phase": "closing_question",
-                "question_text": full_message.strip(),
-                "question_type": "CLOSING_QUESTION",
-                "end_reason": end_reason,
-            })
+            yield self._sse_event(
+                "done",
+                {
+                    "status": "completed",
+                    "phase": "closing_question",
+                    "question_text": full_message.strip(),
+                    "question_type": "CLOSING_QUESTION",
+                    "end_reason": end_reason,
+                },
+            )
 
         except Exception as e:
             logger.error(f"❌ Closing question stream error: {e}")
@@ -272,12 +172,15 @@ class SessionService:
                 yield self._sse_event("continue", {"content": token})
 
             # 완료 이벤트
-            yield self._sse_event("done", {
-                "status": "completed",
-                "phase": InterviewPhase.CLOSING.value,
-                "end_reason": request.end_reason.value,
-                "message": full_message.strip(),
-            })
+            yield self._sse_event(
+                "done",
+                {
+                    "status": "completed",
+                    "phase": InterviewPhase.CLOSING.value,
+                    "end_reason": request.end_reason.value,
+                    "message": full_message.strip(),
+                },
+            )
 
         except Exception as e:
             logger.error(f"❌ Closing stream error: {e}")
